@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// KIL basar – sikkerhetsregler. Se spesifikasjonen «Datamodell og sikkerhet».
+// Utgangspunkt: ingen leser personopplysninger uten admin-innlogging.
+// Endringer her limes inn i Firebase-konsollen ETTER at `npm run test:rules` består.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Admin-kontoer. Reservekonto legges til her.
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['pji.idistudios@gmail.com'];
+    }
+
+    function counterPath(shiftId) {
+      return /databases/$(database)/documents/shiftCounts/$(shiftId);
+    }
+    function signupPath(id) {
+      return /databases/$(database)/documents/signups/$(id);
+    }
+
+    // Oppsett: alle kan lese, bare admin kan skrive
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Telling per skift. Offentlig kan bare øke med 1, aldri over max,
+    // og bare sammen med en NY påmelding på samme skift i samme skriving.
+    match /shiftCounts/{shiftId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count', 'lastSignup'])
+        && request.resource.data.count == resource.data.count + 1
+        && request.resource.data.count <= resource.data.max
+        && request.resource.data.lastSignup is string
+        && !exists(signupPath(request.resource.data.lastSignup))
+        && getAfter(signupPath(request.resource.data.lastSignup)).data.shiftId == shiftId
+      );
+    }
+
+    // Påmeldinger: offentlig kan bare opprette (validert). Lesing kun admin.
+    match /signups/{signupId} {
+      function validBase(d) {
+        return d.keys().hasOnly(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'status'])
+          && d.keys().hasAll(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'status'])
+          && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
+          && d.phone is string && d.phone.matches('^[0-9]{8}$')
+          && d.email is string && d.email.size() <= 120
+          && d.day in ['opprigg', 'd1', 'd2']
+          && d.timePref in ['hele', 'for18', 'etter18']
+          && d.source == 'app'
+          && d.attended == false
+          && d.createdAt == request.time;
+      }
+
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() || (
+        validBase(request.resource.data) && (
+          (request.resource.data.status == 'aktiv'
+            && request.resource.data.shiftId is string
+            && request.resource.data.shiftId.matches('^' + request.resource.data.day + '-.+')
+            && getAfter(counterPath(request.resource.data.shiftId)).data.lastSignup == signupId)
+          ||
+          (request.resource.data.status == 'venteliste' && request.resource.data.shiftId == null)
+        )
+      );
+    }
+
+    // Personindeks for overlappsjekk: bare skift-ID-er, ingen navn.
+    // Kan slås opp på telefonnummer, men ikke listes. Skift kan bare legges til.
+    match /people/{phone} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create: if isAdmin() || (
+        phone.matches('^[0-9]{8}$')
+        && request.resource.data.keys().hasOnly(['shifts'])
+        && request.resource.data.shifts.keys().size() == 1
+      );
+      allow update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['shifts'])
+        && request.resource.data.shifts.keys().hasAll(resource.data.shifts.keys())
+        && request.resource.data.shifts.keys().size() == resource.data.shifts.keys().size() + 1
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Alt annet er stengt
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
