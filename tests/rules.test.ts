@@ -7,6 +7,7 @@ import {
 import { collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp, type Firestore } from 'firebase/firestore';
 import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
+import { addManual, cancelSignup, moveSignup } from '../src/lib/adminOps';
 
 let env: RulesTestEnvironment;
 const ADMIN = { email: 'pji.idistudios@gmail.com', email_verified: true };
@@ -139,5 +140,57 @@ describe('validering og personindeks', () => {
   it('bare admin kan endre oppsettet', async () => {
     await assertFails(setDoc(doc(anon(), 'config', 'main'), { year: 1 }));
     await assertSucceeds(setDoc(doc(admin(), 'config', 'main'), SEED_CONFIG));
+  });
+});
+
+describe('admin: manuell registrering og endring', () => {
+  const count = async (id: string) => (await getDoc(doc(admin(), 'shiftCounts', id))).data()!.count;
+  const signupsOf = async () => (await getDocs(collection(admin(), 'signups'))).docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+
+  it('admin kan legge til over kapasiteten, telleren følger med', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCounts', 'd1-kafe-1400'), { count: 8, max: 8, lastSignup: 'x' });
+    });
+    await addManual(admin(), SEED_CONFIG, { name: 'Uanmeldt', phone: '40000500' }, 'd1-kafe-1400', true);
+    expect(await count('d1-kafe-1400')).toBe(9);
+    const s = (await signupsOf())[0];
+    expect(s.source).toBe('manuell');
+    expect(s.attended).toBe(true);
+  });
+
+  it('anonym kan ikke bruke admin-operasjonene', async () => {
+    await expect(addManual(anon(), SEED_CONFIG, { name: 'X', phone: '40000501' }, 'd1-kafe-1400', true)).rejects.toThrow();
+  });
+
+  it('flytt trekker fra gammelt skift og legger til på nytt', async () => {
+    const id = await addManual(admin(), SEED_CONFIG, { name: 'Flytt', phone: '40000502' }, 'd1-kafe-1600', false);
+    await moveSignup(admin(), SEED_CONFIG, id, 'd2-kafe-1800');
+    expect(await count('d1-kafe-1600')).toBe(0);
+    expect(await count('d2-kafe-1800')).toBe(1);
+    const p = (await getDoc(doc(admin(), 'people', '40000502'))).data()!;
+    expect(Object.keys(p.shifts)).toEqual(['d2-kafe-1800']);
+  });
+
+  it('meld av frigjør plassen og beholder raden', async () => {
+    const id = await addManual(admin(), SEED_CONFIG, { name: 'Av', phone: '40000503' }, 'd1-arer-1530', false);
+    expect(await cancelSignup(admin(), id)).toBe('d1-arer-1530');
+    expect(await count('d1-arer-1530')).toBe(0);
+    const s = (await signupsOf()).find((x: any) => x.id === id);
+    expect(s.status).toBe('avmeldt');
+    expect(await cancelSignup(admin(), id)).toBeNull(); // to ganger trekker ikke fra to ganger
+    expect(await count('d1-arer-1530')).toBe(0);
+  });
+
+  it('flytt fra venteliste øker bare det nye skiftet', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'signups', 'vent1'), {
+        name: 'Venter', phone: '40000504', email: '', day: 'd1', timePref: 'hele', source: 'app',
+        attended: false, createdAt: new Date(), shiftId: null, status: 'venteliste',
+      });
+    });
+    await moveSignup(admin(), SEED_CONFIG, 'vent1', 'd1-lynlodd-1700');
+    expect(await count('d1-lynlodd-1700')).toBe(1);
+    const s = (await signupsOf()).find((x: any) => x.id === 'vent1');
+    expect(s.status).toBe('aktiv');
   });
 });
