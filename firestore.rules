@@ -13,6 +13,22 @@ service cloud.firestore {
         && request.auth.token.email in ['pji.idistudios@gmail.com'];
     }
 
+    // Frist for oppmøteregistrering: 6.1.2027 (én uke etter basaren). Endres her hvert år.
+    function beforeDeadline() {
+      return request.time < timestamp.date(2027, 1, 7);
+    }
+
+    // Hemmelig lenke: anonym innlogging + sessions/{uid} som peker på access/{token}
+    function link() {
+      return get(/databases/$(database)/documents/access/$(get(/databases/$(database)/documents/sessions/$(request.auth.uid)).data.token)).data;
+    }
+    function hasSession() {
+      return request.auth != null && exists(/databases/$(database)/documents/sessions/$(request.auth.uid));
+    }
+    function stationLinkFor(key) {
+      return hasSession() && link().kind == 'stasjon' && link().stationKey == key;
+    }
+
     function counterPath(shiftId) {
       return /databases/$(database)/documents/shiftCounts/$(shiftId);
     }
@@ -44,11 +60,12 @@ service cloud.firestore {
     // Påmeldinger: offentlig kan bare opprette (validert). Lesing kun admin.
     match /signups/{signupId} {
       function validBase(d) {
-        return d.keys().hasOnly(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'status'])
-          && d.keys().hasAll(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'status'])
+        return d.keys().hasOnly(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'stationKey', 'status'])
+          && d.keys().hasAll(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'stationKey', 'status'])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
           && d.phone is string && d.phone.matches('^[0-9]{8}$')
-          && d.email is string && d.email.size() <= 120
+          && d.email == ''
+          && d.stationKey is string
           && d.day in ['opprigg', 'd1', 'd2']
           && d.timePref in ['hele', 'for18', 'etter18']
           && d.source == 'app'
@@ -57,14 +74,23 @@ service cloud.firestore {
       }
 
       allow read, update, delete: if isAdmin();
+
+      // Stasjonslenke: les egen stasjon, endre bare «attended», før fristen
+      allow read: if stationLinkFor(resource.data.stationKey);
+      allow update: if stationLinkFor(resource.data.stationKey)
+        && resource.data.status == 'aktiv'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attended'])
+        && request.resource.data.attended is bool
+        && beforeDeadline();
+
       allow create: if isAdmin() || (
         validBase(request.resource.data) && (
           (request.resource.data.status == 'aktiv'
             && request.resource.data.shiftId is string
-            && request.resource.data.shiftId.matches('^' + request.resource.data.day + '-.+')
+            && request.resource.data.shiftId.matches('^' + request.resource.data.day + '-(' + request.resource.data.stationKey + '-)?[0-9]{4}$')
             && getAfter(counterPath(request.resource.data.shiftId)).data.lastSignup == signupId)
           ||
-          (request.resource.data.status == 'venteliste' && request.resource.data.shiftId == null)
+          (request.resource.data.status == 'venteliste' && request.resource.data.shiftId == null && request.resource.data.stationKey == '')
         )
       );
     }
@@ -84,6 +110,22 @@ service cloud.firestore {
         && request.resource.data.shifts.keys().hasAll(resource.data.shifts.keys())
         && request.resource.data.shifts.keys().size() == resource.data.shifts.keys().size() + 1
       );
+      allow delete: if isAdmin();
+    }
+
+    // Lenker: kun admin oppretter/sperrer. Den som kjenner koden, kan slå opp stasjonsnavnet.
+    match /access/{token} {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
+    // Kobler en anonym innlogging til en lenke. Bare gyldige lenker godtas.
+    match /sessions/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['token'])
+        && request.resource.data.token is string
+        && exists(/databases/$(database)/documents/access/$(request.resource.data.token));
       allow delete: if isAdmin();
     }
 

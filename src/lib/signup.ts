@@ -1,8 +1,9 @@
 import { collection, doc, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore';
 import { pickShift } from './assign';
+import { stationKey } from './station';
 import type { AppConfig, Assignment, DayId, TimePref } from './types';
 
-export interface Person { name: string; phone: string; email: string }
+export interface Person { name: string; phone: string; email?: string }
 
 /**
  * Tildeler én vakt for én dag i én transaksjon:
@@ -45,7 +46,7 @@ export async function signUpForDay(
     const base = {
       name: person.name,
       phone: person.phone,
-      email: person.email,
+      email: '',
       day,
       timePref: pref,
       source: 'app',
@@ -54,11 +55,11 @@ export async function signUpForDay(
     };
 
     if (!chosen) {
-      tx.set(signupRef, { ...base, shiftId: null, status: 'venteliste' });
+      tx.set(signupRef, { ...base, shiftId: null, stationKey: '', status: 'venteliste' });
       return { day, shift: null };
     }
 
-    tx.set(signupRef, { ...base, shiftId: chosen.id, status: 'aktiv' });
+    tx.set(signupRef, { ...base, shiftId: chosen.id, stationKey: stationKey(chosen.station), status: 'aktiv' });
     tx.update(doc(db, 'shiftCounts', chosen.id), { count: counts[chosen.id] + 1, lastSignup: signupRef.id });
     tx.set(personRef, { shifts: { ...owned, [chosen.id]: true } });
     return { day, shift: chosen };

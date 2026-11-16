@@ -3,6 +3,7 @@
 // Admin kan gå over kapasiteten; appen viser advarsel i stedet for å stoppe.
 import { collection, doc, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore';
 import { matchesPref } from './assign';
+import { stationKey } from './station';
 import type { AppConfig, Shift, TimePref } from './types';
 
 export interface SignupRow {
@@ -34,7 +35,7 @@ export async function addManual(
     const ref = doc(collection(db, 'signups'));
     tx.set(ref, {
       name: person.name, phone: person.phone, email: person.email ?? '', day: shift.day, timePref: 'hele',
-      source: 'manuell', attended: attendedNow, createdAt: serverTimestamp(), shiftId, status: 'aktiv',
+      source: 'manuell', attended: attendedNow, createdAt: serverTimestamp(), shiftId, stationKey: stationKey(shift.station), status: 'aktiv',
     });
     tx.update(counterRef, { count: (counter.data()?.count ?? 0) + 1, lastSignup: ref.id });
     tx.set(personRef, { shifts: { ...(p.data()?.shifts ?? {}), [shiftId]: true } });
@@ -65,7 +66,7 @@ export async function moveSignup(db: Firestore, config: AppConfig, signupId: str
 
     if (oldRef && oldC) tx.update(oldRef, { count: Math.max(0, (oldC.data()?.count ?? 1) - 1) });
     tx.update(newRef, { count: (newC.data()?.count ?? 0) + 1, lastSignup: signupId });
-    tx.update(sRef, { shiftId: newShiftId, day: target.day, status: 'aktiv' });
+    tx.update(sRef, { shiftId: newShiftId, stationKey: stationKey(target.station), day: target.day, status: 'aktiv' });
     tx.set(pRef, { shifts });
   });
 }

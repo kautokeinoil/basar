@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, orderBy, query, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { SEED_CONFIG } from '../config/seed';
 import { normalizePhone } from '../lib/phone';
 import { addManual, cancelSignup, moveSignup, setAttended, waitlistFor, type SignupRow } from '../lib/adminOps';
+import { newToken, stationKey, stationsOf } from '../lib/station';
 import type { AppConfig, Shift } from '../lib/types';
 
 type Counts = Record<string, { count: number; max: number }>;
@@ -48,6 +49,15 @@ export default function Admin() {
     for (const s of SEED_CONFIG.shifts) {
       const ref = doc(db, 'shiftCounts', s.id);
       if (!(await getDoc(ref)).exists()) { await setDoc(ref, { count: 0, max: s.base + s.extra, lastSignup: '' }); created++; }
+    }
+    // Gamle påmeldinger uten stasjonsfelt får det (trengs for stasjonslenkene)
+    const all = await getDocs(collection(db, 'signups'));
+    for (const d of all.docs) {
+      const data = d.data();
+      if (data.stationKey === undefined) {
+        const sh = SEED_CONFIG.shifts.find((x) => x.id === data.shiftId);
+        await updateDoc(d.ref, { stationKey: sh && data.status === 'aktiv' ? stationKey(sh.station) : '' });
+      }
     }
     return created;
   }
@@ -95,11 +105,12 @@ export default function Admin() {
               setFreed(f ? config.shifts.find((s) => s.id === f) ?? null : null);
             })}
             onAttended={(id, v) => run(v ? 'Registrert som møtt.' : 'Oppmøte fjernet.', () => setAttended(db, id, v))} />
+          <Links config={config} />
           <Overview config={config} counts={counts} signups={signups} />
           <details className="small">
             <summary>Vedlikehold</summary>
-            <p className="muted">Oppretter bare tellere som mangler. Nullstiller aldri eksisterende påmeldinger.</p>
-            <button onClick={() => run('Ferdig.', seed)}>Opprett manglende tellere</button>
+            <p className="muted">Oppretter bare det som mangler (tellere, stasjonsfelt). Nullstiller aldri påmeldinger.</p>
+            <button onClick={() => run('Ferdig.', seed)}>Opprett manglende tellere og felt</button>
           </details>
         </>
       )}
@@ -250,6 +261,60 @@ function Overview({ config, counts, signups }: { config: AppConfig; counts: Coun
           })}
         </tbody>
       </table>
+    </details>
+  );
+}
+
+interface AccessDoc { token: string; kind: string; stationKey: string; station: string }
+
+function Links({ config }: { config: AppConfig }) {
+  const [links, setLinks] = useState<AccessDoc[] | null>(null);
+  const [copied, setCopied] = useState('');
+  const base = `${window.location.origin}${window.location.pathname}#/stasjon/`;
+
+  async function load() {
+    const snap = await getDocs(collection(db, 'access'));
+    setLinks(snap.docs.map((d) => ({ token: d.id, ...(d.data() as Omit<AccessDoc, 'token'>) })));
+  }
+  useEffect(() => { load(); }, []);
+
+  // Sperrer eventuell gammel lenke og lager en ny for stasjonen
+  async function renew(key: string, name: string) {
+    for (const l of (links ?? []).filter((x) => x.kind === 'stasjon' && x.stationKey === key)) {
+      await deleteDoc(doc(db, 'access', l.token));
+    }
+    await setDoc(doc(db, 'access', newToken()), { kind: 'stasjon', stationKey: key, station: name, createdAt: serverTimestamp() });
+    await load();
+  }
+
+  async function copy(url: string) {
+    try { await navigator.clipboard.writeText(url); setCopied(url); } catch { setCopied(''); }
+  }
+
+  return (
+    <details className="panel">
+      <summary>Stasjonslenker</summary>
+      <p className="muted small">Send lenken til den som har ansvaret for stasjonen. Den viser navn og telefon for stasjonen og lar dem krysse av oppmøte. «Sperr og lag ny» gjør den gamle lenken ubrukelig med en gang.</p>
+      {links === null ? <p className="muted">Laster …</p> : stationsOf(config).map((st) => {
+        const l = links.find((x) => x.kind === 'stasjon' && x.stationKey === st.key);
+        const url = l ? base + l.token : '';
+        return (
+          <div key={st.key} className="linkrow">
+            <strong>{st.name}</strong>
+            {l ? (
+              <>
+                <code>{url}</code>
+                <div className="row">
+                  <button onClick={() => copy(url)}>{copied === url ? 'Kopiert' : 'Kopier lenke'}</button>
+                  <button className="secondary" onClick={() => renew(st.key, st.name)}>Sperr og lag ny</button>
+                </div>
+              </>
+            ) : (
+              <button onClick={() => renew(st.key, st.name)}>Lag lenke</button>
+            )}
+          </div>
+        );
+      })}
     </details>
   );
 }

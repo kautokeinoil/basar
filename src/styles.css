@@ -56,3 +56,10 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .card.dim { border-left-color: var(--line); }
 .card .choice { padding: 8px 12px; }
 .plain { padding-left: 18px; margin: 8px 0; }
+h2 { font-size: 19px; margin: 24px 0 8px; }
+.station { display: grid; gap: 4px; }
+.station .panel { margin-bottom: 12px; }
+.people { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.people a { font-size: 15px; }
+.linkrow { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.linkrow code { font-size: 12px; word-break: break-all; color: var(--muted); }

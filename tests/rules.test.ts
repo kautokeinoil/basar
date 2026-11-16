@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp, type Firestore } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch, serverTimestamp, type Firestore } from 'firebase/firestore';
 import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
 import { addManual, cancelSignup, moveSignup } from '../src/lib/adminOps';
@@ -192,5 +192,54 @@ describe('admin: manuell registrering og endring', () => {
     expect(await count('d1-lynlodd-1700')).toBe(1);
     const s = (await signupsOf()).find((x: any) => x.id === 'vent1');
     expect(s.status).toBe('aktiv');
+  });
+});
+
+describe('stasjonslenker', () => {
+  const lead = () => env.authenticatedContext('anon-lead', { firebase: { sign_in_provider: 'anonymous' } } as any).firestore() as unknown as Firestore;
+  const kafeQ = (db: Firestore) => query(collection(db, 'signups'), where('stationKey', '==', 'kafe'), where('status', '==', 'aktiv'));
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'access', 'tok-kafe-abcdefghijkl'), { kind: 'stasjon', stationKey: 'kafe', station: 'Kafé' });
+    });
+    await addManual(admin(), SEED_CONFIG, { name: 'Kafé-person', phone: '40000600' }, 'd1-kafe-1400', false);
+    await addManual(admin(), SEED_CONFIG, { name: 'Årer-person', phone: '40000601' }, 'd1-arer-1530', false);
+  });
+
+  it('uten gyldig lenke får man ikke lese', async () => {
+    await assertFails(getDocs(kafeQ(lead())));
+    await assertFails(setDoc(doc(lead(), 'sessions', 'anon-lead'), { token: 'gjettet-kode' }));
+  });
+
+  it('gyldig lenke leser egen stasjon, ikke andres', async () => {
+    const db = lead();
+    await assertSucceeds(setDoc(doc(db, 'sessions', 'anon-lead'), { token: 'tok-kafe-abcdefghijkl' }));
+    const snap = await assertSucceeds(getDocs(kafeQ(db)));
+    expect(snap.docs.map((d) => d.data().name)).toEqual(['Kafé-person']);
+    await assertFails(getDocs(query(collection(db, 'signups'), where('stationKey', '==', 'arer'))));
+    await assertFails(getDocs(collection(db, 'signups')));
+  });
+
+  it('kan krysse av oppmøte, men ikke endre noe annet', async () => {
+    const db = lead();
+    await setDoc(doc(db, 'sessions', 'anon-lead'), { token: 'tok-kafe-abcdefghijkl' });
+    const id = (await getDocs(kafeQ(db))).docs[0].id;
+    await assertSucceeds(updateDoc(doc(db, 'signups', id), { attended: true }));
+    await assertFails(updateDoc(doc(db, 'signups', id), { name: 'Endret' }));
+    await assertFails(updateDoc(doc(db, 'signups', id), { attended: false, status: 'avmeldt' }));
+  });
+
+  it('sperret lenke slutter å virke med en gang', async () => {
+    const db = lead();
+    await setDoc(doc(db, 'sessions', 'anon-lead'), { token: 'tok-kafe-abcdefghijkl' });
+    await assertSucceeds(getDocs(kafeQ(db)));
+    await deleteDoc(doc(admin(), 'access', 'tok-kafe-abcdefghijkl'));
+    await assertFails(getDocs(kafeQ(db)));
+  });
+
+  it('bare admin kan lage lenker eller liste dem', async () => {
+    await assertFails(setDoc(doc(lead(), 'access', 'egen'), { kind: 'stasjon', stationKey: 'kafe', station: 'Kafé' }));
+    await assertFails(getDocs(collection(lead(), 'access')));
   });
 });

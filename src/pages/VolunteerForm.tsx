@@ -15,7 +15,6 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
   const cfg = useConfig();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [days, setDays] = useState<DayId[]>([]);
   const [pref, setPref] = useState<TimePref | ''>('');
   const [busy, setBusy] = useState(false);
@@ -39,7 +38,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
 
     setBusy(true);
     try {
-      const person = { name: name.trim(), phone: p, email: email.trim() };
+      const person = { name: name.trim(), phone: p };
       const results: Assignment[] = [];
       // Én transaksjon per dag, i dagenes rekkefølge
       for (const d of config.days.map((x) => x.id).filter((id) => days.includes(id))) {
@@ -68,10 +67,6 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
       <label>
         Telefon
         <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" required />
-      </label>
-      <label>
-        E-post <span className="muted">(valgfritt)</span>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" />
       </label>
 
       <fieldset>
