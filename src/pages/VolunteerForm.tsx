@@ -58,7 +58,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
     <form onSubmit={submit} className="form" noValidate>
       <h1>Meld deg som frivillig</h1>
       <p className="muted">
-        Du får én tilfeldig vakt per dag du velger. Alle som møter opp på vakt, er med i trekningen av frivilliggevinster.
+        Du får én tilfeldig vakt per dag du velger. Alle som møter opp på vakt, er med i trekningen av et gavekort på 5000 kr.
       </p>
 
       <label>
