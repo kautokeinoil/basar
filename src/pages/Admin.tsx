@@ -44,7 +44,9 @@ export default function Admin() {
 
   async function seed() {
     const cfgRef = doc(db, 'config', 'main');
-    if (!(await getDoc(cfgRef)).exists()) await setDoc(cfgRef, SEED_CONFIG);
+    const cfgSnap = await getDoc(cfgRef);
+    if (!cfgSnap.exists()) await setDoc(cfgRef, SEED_CONFIG);
+    else if (!cfgSnap.data().cakeTypes) await updateDoc(cfgRef, { cakeTypes: SEED_CONFIG.cakeTypes });
     let created = 0;
     for (const s of SEED_CONFIG.shifts) {
       const ref = doc(db, 'shiftCounts', s.id);
@@ -270,7 +272,11 @@ interface AccessDoc { token: string; kind: string; stationKey: string; station: 
 function Links({ config }: { config: AppConfig }) {
   const [links, setLinks] = useState<AccessDoc[] | null>(null);
   const [copied, setCopied] = useState('');
-  const base = `${window.location.origin}${window.location.pathname}#/stasjon/`;
+  const base = `${window.location.origin}${window.location.pathname}#/`;
+  const targets = [
+    ...stationsOf(config).map((s) => ({ kind: 'stasjon', key: s.key, name: s.name })),
+    { kind: 'kake', key: 'kake', name: 'Kakemottak' },
+  ];
 
   async function load() {
     const snap = await getDocs(collection(db, 'access'));
@@ -279,11 +285,11 @@ function Links({ config }: { config: AppConfig }) {
   useEffect(() => { load(); }, []);
 
   // Sperrer eventuell gammel lenke og lager en ny for stasjonen
-  async function renew(key: string, name: string) {
-    for (const l of (links ?? []).filter((x) => x.kind === 'stasjon' && x.stationKey === key)) {
+  async function renew(kind: string, key: string, name: string) {
+    for (const l of (links ?? []).filter((x) => x.kind === kind && x.stationKey === key)) {
       await deleteDoc(doc(db, 'access', l.token));
     }
-    await setDoc(doc(db, 'access', newToken()), { kind: 'stasjon', stationKey: key, station: name, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'access', newToken()), { kind, stationKey: key, station: name, createdAt: serverTimestamp() });
     await load();
   }
 
@@ -293,24 +299,24 @@ function Links({ config }: { config: AppConfig }) {
 
   return (
     <details className="panel">
-      <summary>Stasjonslenker</summary>
-      <p className="muted small">Send lenken til den som har ansvaret for stasjonen. Den viser navn og telefon for stasjonen og lar dem krysse av oppmøte. «Sperr og lag ny» gjør den gamle lenken ubrukelig med en gang.</p>
-      {links === null ? <p className="muted">Laster …</p> : stationsOf(config).map((st) => {
-        const l = links.find((x) => x.kind === 'stasjon' && x.stationKey === st.key);
-        const url = l ? base + l.token : '';
+      <summary>Lenker for stasjoner og kakemottak</summary>
+      <p className="muted small">Send lenken til den som har ansvaret. Stasjonslenken viser navn og telefon for stasjonen og lar dem krysse av oppmøte. Kakemottaket krysser av levert. «Sperr og lag ny» gjør den gamle lenken ubrukelig med en gang.</p>
+      {links === null ? <p className="muted">Laster …</p> : targets.map((st) => {
+        const l = links.find((x) => x.kind === st.kind && x.stationKey === st.key);
+        const url = l ? `${base}${st.kind}/${l.token}` : '';
         return (
-          <div key={st.key} className="linkrow">
+          <div key={st.kind + st.key} className="linkrow">
             <strong>{st.name}</strong>
             {l ? (
               <>
                 <code>{url}</code>
                 <div className="row">
                   <button onClick={() => copy(url)}>{copied === url ? 'Kopiert' : 'Kopier lenke'}</button>
-                  <button className="secondary" onClick={() => renew(st.key, st.name)}>Sperr og lag ny</button>
+                  <button className="secondary" onClick={() => renew(st.kind, st.key, st.name)}>Sperr og lag ny</button>
                 </div>
               </>
             ) : (
-              <button onClick={() => renew(st.key, st.name)}>Lag lenke</button>
+              <button onClick={() => renew(st.kind, st.key, st.name)}>Lag lenke</button>
             )}
           </div>
         );

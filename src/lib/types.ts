@@ -14,12 +14,16 @@ export interface Shift {
   priority: number;  // 1 fylles først i fase 2
 }
 
+export type CakeTypeId = 'flotekake' | 'formkake' | 'muffins' | 'vaffel';
+export interface CakeType { id: CakeTypeId; name: string; unit: string }
+
 export interface AppConfig {
   year: number;
   contact: { email: string; phone: string };
   place: string;
   days: Day[];
   shifts: Shift[];
+  cakeTypes?: CakeType[];
 }
 
 export interface Assignment {

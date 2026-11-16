@@ -4,6 +4,8 @@ import VolunteerForm from './pages/VolunteerForm';
 import Confirmation from './pages/Confirmation';
 import Admin from './pages/Admin';
 import Station from './pages/Station';
+import CakeForm from './pages/CakeForm';
+import CakeDesk from './pages/CakeDesk';
 import type { Assignment } from './lib/types';
 
 // Hash-ruting fungerer på GitHub Pages uten serveroppsett.
@@ -24,6 +26,10 @@ export default function App() {
     page = <VolunteerForm onDone={(r) => { setResult(r); window.location.hash = '#/bekreftelse'; }} />;
   } else if (path === 'bekreftelse' && result) {
     page = <Confirmation assignments={result} />;
+  } else if (path === 'kaker') {
+    page = <CakeForm />;
+  } else if (path.startsWith('kake/')) {
+    page = <CakeDesk token={path.slice('kake/'.length)} />;
   } else if (path.startsWith('stasjon/')) {
     page = <Station token={path.slice('stasjon/'.length)} />;
   } else if (path === 'admin') {

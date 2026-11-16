@@ -8,6 +8,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, 
 import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
 import { addManual, cancelSignup, moveSignup } from '../src/lib/adminOps';
+import { registerCakes, emptyLine } from '../src/lib/cakes';
 
 let env: RulesTestEnvironment;
 const ADMIN = { email: 'pji.idistudios@gmail.com', email_verified: true };
@@ -241,5 +242,49 @@ describe('stasjonslenker', () => {
   it('bare admin kan lage lenker eller liste dem', async () => {
     await assertFails(setDoc(doc(lead(), 'access', 'egen'), { kind: 'stasjon', stationKey: 'kafe', station: 'Kafé' }));
     await assertFails(getDocs(collection(lead(), 'access')));
+  });
+});
+
+describe('kaker', () => {
+  const desk = () => env.authenticatedContext('anon-desk', { firebase: { sign_in_provider: 'anonymous' } } as any).firestore() as unknown as Firestore;
+  const line = (type: any, day: any) => ({ ...emptyLine(), type, deliveryDay: day, variant: 'Sjokolade', allergens: 'egg' });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'access', 'tok-kake-abcdefghijkl'), { kind: 'kake', stationKey: 'kake', station: 'Kakemottak' });
+      await setDoc(doc(ctx.firestore(), 'access', 'tok-kafe-abcdefghijkl'), { kind: 'stasjon', stationKey: 'kafe', station: 'Kafé' });
+    });
+  });
+
+  it('anonym kan registrere flere bakverk, men ikke lese dem', async () => {
+    await registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('flotekake', 'd1'), line('vaffel', 'd2')]);
+    await assertFails(getDocs(collection(anon(), 'cakes')));
+    const all = await getDocs(collection(admin(), 'cakes'));
+    expect(all.size).toBe(2);
+    expect(new Set(all.docs.map((d) => d.data().regId)).size).toBe(1);
+  });
+
+  it('avviser ukjent type, ugyldig dag og ferdig avkrysset levert', async () => {
+    await expect(registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('pizza', 'd1')])).rejects.toThrow();
+    await expect(registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('formkake', 'opprigg')])).rejects.toThrow();
+    await assertFails(setDoc(doc(anon(), 'cakes', 'x'), {
+      regId: 'r', name: 'Juks', phone: '40000701', type: 'formkake', variant: '', glutenFree: false, lactoseFree: false,
+      allergens: '', deliveryDay: 'd1', delivered: true, source: 'app', createdAt: serverTimestamp() }));
+  });
+
+  it('kakemottak leser og krysser av levert, men endrer ikke annet', async () => {
+    await registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('muffins', 'd1')]);
+    const db = desk();
+    await setDoc(doc(db, 'sessions', 'anon-desk'), { token: 'tok-kake-abcdefghijkl' });
+    const snap = await assertSucceeds(getDocs(collection(db, 'cakes')));
+    const id = snap.docs[0].id;
+    await assertSucceeds(updateDoc(doc(db, 'cakes', id), { delivered: true }));
+    await assertFails(updateDoc(doc(db, 'cakes', id), { name: 'Endret' }));
+  });
+
+  it('stasjonslenke får ikke lese kaker', async () => {
+    const db = desk();
+    await setDoc(doc(db, 'sessions', 'anon-desk'), { token: 'tok-kafe-abcdefghijkl' });
+    await assertFails(getDocs(collection(db, 'cakes')));
   });
 });

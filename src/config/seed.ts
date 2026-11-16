@@ -7,6 +7,12 @@ export const SEED_CONFIG: AppConfig = {
   year: 2026,
   contact: { email: 'basar@kautokeinoil.no', phone: '41321804' },
   place: 'Báktehárji',
+  cakeTypes: [
+    { id: 'flotekake', name: 'Fløtekake', unit: '1 kake' },
+    { id: 'formkake', name: 'Formkake', unit: '1 kake' },
+    { id: 'muffins', name: 'Muffins/boller', unit: '1 brett' },
+    { id: 'vaffel', name: 'Vaffelrøre', unit: '4 liter' },
+  ],
   days: [
     { id: 'opprigg', name: 'Opprigg', date: '2026-12-28' },
     { id: 'd1', name: 'Basardag 1', date: '2026-12-29' },

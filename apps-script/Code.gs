@@ -15,12 +15,19 @@ var MAX_FAILS_BEFORE_MAIL = 3;
 
 var DAY_NAMES = { opprigg: 'Opprigg', d1: 'Basardag 1', d2: 'Basardag 2' };
 var PREF_NAMES = { hele: 'Når som helst', for18: 'Før 18', etter18: 'Etter 18' };
+var LOG_TAB = 'Trekningslogg';
+var LOG_HEADER = ['Tidspunkt', 'Vinner', 'Telefon (siste 3)', 'Personens lodd', 'Lodd totalt', 'Telefon (intern)'];
 
 var TABS = {
   Vakter: {
     collection: 'signups',
     header: ['ID', 'Dag', 'Dato', 'Stasjon', 'Start', 'Slutt', 'Navn', 'Telefon', 'E-post', 'Tidsvalg', 'Status', 'Møtt', 'Kilde', 'Registrert'],
     toRow: signupToRow_,
+  },
+  Kaker: {
+    collection: 'cakes',
+    header: ['ID', 'Registrering', 'Navn', 'Telefon', 'Type', 'Variant', 'Glutenfri', 'Laktosefri', 'Allergener', 'Leveringsdag', 'Levert', 'Kilde', 'Registrert'],
+    toRow: cakeToRow_,
   },
 };
 
@@ -30,6 +37,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Basar')
     .addItem('Synk nå', 'syncNow')
+    .addItem('Trekk vinner', 'drawWinner')
     .addSeparator()
     .addItem('Oppsett (kjør én gang)', 'setup')
     .addToUi();
@@ -129,6 +137,57 @@ function planUpsert_(existingIds, rows) {
   return { updates: updates, appends: appends };
 }
 
+function cakeToRow_(d, config) {
+  var f = d.fields;
+  var type = (config.cakeTypes || []).filter(function (t) { return t.id === f.type; })[0];
+  return [
+    d.id,
+    f.regId || '',
+    f.name || '',
+    f.phone || '',
+    type ? type.name : (f.type || ''),
+    f.variant || '',
+    f.glutenFree ? 'JA' : 'NEI',
+    f.lactoseFree ? 'JA' : 'NEI',
+    f.allergens || '',
+    DAY_NAMES[f.deliveryDay] || f.deliveryDay || '',
+    f.delivered ? 'JA' : 'NEI',
+    f.source || '',
+    f.createdAt ? formatTime_(f.createdAt) : '',
+  ];
+}
+
+/**
+ * Lodd: én per vaktskift med Møtt = JA (status aktiv) og én per bakverk med Levert = JA.
+ * Personnøkkel er telefonnummeret. Tidligere vinnere er utelukket (én gevinst per person).
+ */
+function buildTickets_(vakter, kaker, excludedPhones) {
+  var ex = {};
+  excludedPhones.forEach(function (p) { ex[String(p)] = true; });
+  var tickets = [];
+  function add(rows, okCol) {
+    if (!rows.length) return;
+    var h = rows[0];
+    var iName = h.indexOf('Navn'), iPhone = h.indexOf('Telefon'), iOk = h.indexOf(okCol), iStatus = h.indexOf('Status');
+    rows.slice(1).forEach(function (r) {
+      var phone = String(r[iPhone] || '');
+      if (!phone || ex[phone] || r[iOk] !== 'JA') return;
+      if (iStatus >= 0 && r[iStatus] !== 'aktiv') return;
+      tickets.push({ name: String(r[iName]), phone: phone });
+    });
+  }
+  add(vakter, 'Møtt');
+  add(kaker, 'Levert');
+  return tickets;
+}
+
+function pickWinner_(tickets, rnd) {
+  if (!tickets.length) return null;
+  var w = tickets[Math.floor(rnd() * tickets.length)];
+  var own = tickets.filter(function (t) { return t.phone === w.phone; }).length;
+  return { name: w.name, phone: w.phone, own: own, total: tickets.length };
+}
+
 function signupToRow_(d, config) {
   var f = d.fields;
   var shift = (config.shifts || []).filter(function (s) { return s.id === f.shiftId; })[0];
@@ -173,6 +232,29 @@ function decodeDoc_(doc) {
   return { id: doc.name.split('/').pop(), fields: decodeFields_(doc.fields || {}) };
 }
 
+// ---------- Trekning ----------
+
+function drawWinner() {
+  var ui = SpreadsheetApp.getUi();
+  runSync_(false); // ferskeste oppmøte og leveranser
+  var ss = SpreadsheetApp.getActive();
+  var read = function (name) { var sh = ss.getSheetByName(name); return sh && sh.getLastRow() > 0 ? sh.getDataRange().getValues() : []; };
+  var log = ss.getSheetByName(LOG_TAB) || ss.insertSheet(LOG_TAB);
+  if (log.getLastRow() === 0) { log.getRange(1, 1, 1, LOG_HEADER.length).setValues([LOG_HEADER]).setFontWeight('bold'); log.setFrozenRows(1); }
+  var winners = log.getLastRow() > 1 ? log.getRange(2, 6, log.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+
+  var tickets = buildTickets_(read('Vakter'), read('Kaker'), winners);
+  if (!tickets.length) { ui.alert('Ingen lodd igjen å trekke blant.'); return; }
+  var people = {}; tickets.forEach(function (t) { people[t.phone] = true; });
+  var ok = ui.alert('Trekk vinner', tickets.length + ' lodd fordelt på ' + Object.keys(people).length +
+    ' personer. Tidligere vinnere er ikke med.\n\nTrekke nå?', ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+
+  var w = pickWinner_(tickets, Math.random);
+  log.appendRow([Utilities.formatDate(new Date(), 'Europe/Oslo', 'yyyy-MM-dd HH:mm:ss'), w.name, '…' + w.phone.slice(-3), w.own, w.total, w.phone]);
+  ui.alert('Vinner: ' + w.name + ' (tlf. …' + w.phone.slice(-3) + ')\n\n' + w.own + ' av ' + w.total + ' lodd. Skrevet i ' + LOG_TAB + '.');
+}
+
 // ---------- Firestore REST ----------
 
 function request_(url) {
@@ -215,5 +297,6 @@ function writeStatus_(started, result, details) {
 
 // Eksport for Node-tester (ignoreres i Apps Script)
 if (typeof module !== 'undefined') {
-  module.exports = { headerPlan_: headerPlan_, planUpsert_: planUpsert_, signupToRow_: signupToRow_, decodeDoc_: decodeDoc_, TABS: TABS };
+  module.exports = { headerPlan_: headerPlan_, planUpsert_: planUpsert_, signupToRow_: signupToRow_, cakeToRow_: cakeToRow_,
+    buildTickets_: buildTickets_, pickWinner_: pickWinner_, decodeDoc_: decodeDoc_, TABS: TABS };
 }

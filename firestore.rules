@@ -113,6 +113,37 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Kaker: offentlig kan registrere (validert). Kakemottak-lenken leser og krysser av «levert».
+    // Kaketypene må stemme med config (cakeTypes); legges en type til, må den også inn her.
+    match /cakes/{cakeId} {
+      function validCake(d) {
+        return d.keys().hasOnly(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'delivered', 'source', 'createdAt'])
+          && d.keys().hasAll(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'delivered', 'source', 'createdAt'])
+          && d.regId is string && d.regId.size() <= 40
+          && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
+          && d.phone is string && d.phone.matches('^[0-9]{8}$')
+          && d.type in ['flotekake', 'formkake', 'muffins', 'vaffel']
+          && d.variant is string && d.variant.size() <= 80
+          && d.glutenFree is bool && d.lactoseFree is bool
+          && d.allergens is string && d.allergens.size() <= 200
+          && d.deliveryDay in ['d1', 'd2']
+          && d.delivered == false
+          && d.source == 'app'
+          && d.createdAt == request.time;
+      }
+      function cakeLink() {
+        return hasSession() && link().kind == 'kake';
+      }
+
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() || validCake(request.resource.data);
+      allow read: if cakeLink();
+      allow update: if cakeLink()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivered'])
+        && request.resource.data.delivered is bool
+        && beforeDeadline();
+    }
+
     // Lenker: kun admin oppretter/sperrer. Den som kjenner koden, kan slå opp stasjonsnavnet.
     match /access/{token} {
       allow get: if true;

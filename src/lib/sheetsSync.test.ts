@@ -9,7 +9,7 @@ vm.runInNewContext(readFileSync('apps-script/Code.gs', 'utf8'), {
   module: mod,
   Utilities: { formatDate: (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ') },
 });
-const { headerPlan_, planUpsert_, signupToRow_, decodeDoc_, TABS } = mod.exports;
+const { headerPlan_, planUpsert_, signupToRow_, cakeToRow_, buildTickets_, pickWinner_, decodeDoc_, TABS } = mod.exports;
 const header = TABS.Vakter.header as string[];
 
 describe('overskrifter', () => {
@@ -67,5 +67,44 @@ describe('Firestore-dokument → rad', () => {
     const row = signupToRow_(d, SEED_CONFIG);
     expect(row.slice(3, 6)).toEqual(['', '', '']);
     expect(row[10]).toBe('venteliste');
+  });
+});
+
+describe('kaker og trekning', () => {
+  it('kake blir rad med typenavn og JA/NEI', () => {
+    const d = decodeDoc_({ name: 'x/cakes/k1', fields: {
+      regId: { stringValue: 'r1' }, name: { stringValue: 'Ole' }, phone: { stringValue: '41111111' },
+      type: { stringValue: 'vaffel' }, variant: { stringValue: '' }, glutenFree: { booleanValue: true },
+      lactoseFree: { booleanValue: false }, allergens: { stringValue: 'egg' }, deliveryDay: { stringValue: 'd2' },
+      delivered: { booleanValue: true }, source: { stringValue: 'app' } } });
+    const row = cakeToRow_(d, SEED_CONFIG);
+    expect(row).toHaveLength(TABS.Kaker.header.length);
+    expect(row.slice(4, 11)).toEqual(['Vaffelrøre', '', 'JA', 'NEI', 'egg', 'Basardag 2', 'JA']);
+  });
+
+  const V = [TABS.Vakter.header,
+    ['a', '', '', '', '', '', 'Anne', '40000001', '', '', 'aktiv', 'JA', 'app', ''],
+    ['b', '', '', '', '', '', 'Anne', '40000001', '', '', 'aktiv', 'JA', 'app', ''],
+    ['c', '', '', '', '', '', 'Ole', '40000002', '', '', 'aktiv', 'JA', 'app', ''],
+    ['d', '', '', '', '', '', 'Ikke møtt', '40000003', '', '', 'aktiv', 'NEI', 'app', ''],
+    ['e', '', '', '', '', '', 'Avmeldt', '40000004', '', '', 'avmeldt', 'JA', 'app', '']];
+  const K = [TABS.Kaker.header,
+    ['k1', 'r', 'Anne', '40000001', 'Fløtekake', '', 'NEI', 'NEI', '', 'Basardag 1', 'JA', 'app', ''],
+    ['k2', 'r', 'Kari', '40000005', 'Formkake', '', 'NEI', 'NEI', '', 'Basardag 1', 'NEI', 'app', '']];
+
+  it('lodd: møtt-vakter og leverte kaker, ikke ikke-møtt, avmeldt eller ikke levert', () => {
+    const t = buildTickets_(V, K, []);
+    expect(t.map((x: any) => x.name)).toEqual(['Anne', 'Anne', 'Ole', 'Anne']); // Anne 3, Ole 1 (som eksempelet i spesifikasjonen)
+  });
+
+  it('en vinner er utelukket fra neste trekning', () => {
+    const t = buildTickets_(V, K, ['40000001']);
+    expect(t.map((x: any) => x.name)).toEqual(['Ole']);
+  });
+
+  it('trekning rapporterer personens og totale lodd', () => {
+    const w = pickWinner_(buildTickets_(V, K, []), () => 0);
+    expect(w).toEqual({ name: 'Anne', phone: '40000001', own: 3, total: 4 });
+    expect(pickWinner_([], () => 0)).toBeNull();
   });
 });
