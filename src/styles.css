@@ -73,3 +73,5 @@ fieldset.panel { display: grid; gap: 12px; }
 fieldset.panel legend { padding: 0 4px; }
 .stats { display: grid; gap: 8px; margin-bottom: 8px; }
 .people .choice span > span { color: var(--muted); font-size: 15px; }
+.phone { display: grid; grid-template-columns: minmax(0, 9.5em) 1fr; gap: 8px; }
+.phone select { padding: 12px 8px; }

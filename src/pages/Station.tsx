@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { db } from '../firebase';
+import { auth } from '../auth';
+import { displayPhone } from '../lib/phone';
 import { useConfig, formatDate } from '../lib/useConfig';
 
 interface Row { id: string; name: string; phone: string; day: string; shiftId: string; attended: boolean }
@@ -77,7 +79,7 @@ export default function Station({ token }: { token: string }) {
                   <li key={p.id}>
                     <label className="choice">
                       <input type="checkbox" checked={p.attended} disabled={busy === p.id} onChange={() => toggle(p)} />
-                      <span><strong>{p.name}</strong><a href={`tel:${p.phone}`}>{p.phone}</a></span>
+                      <span><strong>{p.name}</strong><a href={`tel:${p.phone}`}>{displayPhone(p.phone)}</a></span>
                     </label>
                   </li>
                 ))}

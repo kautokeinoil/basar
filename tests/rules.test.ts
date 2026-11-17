@@ -34,7 +34,7 @@ beforeEach(async () => {
 
 const anon = () => env.unauthenticatedContext().firestore() as unknown as Firestore;
 const admin = () => env.authenticatedContext('admin', ADMIN).firestore() as unknown as Firestore;
-const person = (n: number) => ({ name: `Test ${n}`, phone: String(40000000 + n), email: '' });
+const person = (n: number) => ({ name: `Test ${n}`, phone: '+47' + String(40000000 + n), email: '' });
 
 describe('personvern', () => {
   it('anonym kan melde seg på, men ikke lese påmeldinger', async () => {
@@ -45,7 +45,7 @@ describe('personvern', () => {
 
   it('anonym kan ikke liste personindeksen, men slå opp ett nummer', async () => {
     await assertFails(getDocs(collection(anon(), 'people')));
-    await assertSucceeds(getDoc(doc(anon(), 'people', '40000001')));
+    await assertSucceeds(getDoc(doc(anon(), 'people', '+4740000001')));
   });
 
   it('admin kan lese påmeldinger', async () => {
@@ -71,7 +71,7 @@ describe('kapasitet håndheves i reglene', () => {
 
   it('kan ikke opprette aktiv påmelding uten å øke telleren', async () => {
     await assertFails(setDoc(doc(anon(), 'signups', 'abc'), {
-      name: 'Juks', phone: '40000099', email: '', day: 'd1', timePref: 'hele', source: 'app',
+      name: 'Juks', phone: '+4740000099', email: '', day: 'd1', timePref: 'hele', source: 'app',
       attended: false, createdAt: serverTimestamp(), shiftId: 'd1-kafe-1400', status: 'aktiv',
     }));
   });
@@ -83,7 +83,7 @@ describe('kapasitet håndheves i reglene', () => {
     const db = anon();
     const b = writeBatch(db);
     b.set(doc(db, 'signups', 'ny1'), {
-      name: 'For mange', phone: '40000098', email: '', day: 'd1', timePref: 'hele', source: 'app',
+      name: 'For mange', phone: '+4740000098', email: '', day: 'd1', timePref: 'hele', source: 'app',
       attended: false, createdAt: serverTimestamp(), shiftId: 'd1-kafe-1400', status: 'aktiv',
     });
     b.update(doc(db, 'shiftCounts', 'd1-kafe-1400'), { count: 9, lastSignup: 'ny1' });
@@ -152,7 +152,7 @@ describe('admin: manuell registrering og endring', () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'shiftCounts', 'd1-kafe-1400'), { count: 8, max: 8, lastSignup: 'x' });
     });
-    await addManual(admin(), SEED_CONFIG, { name: 'Uanmeldt', phone: '40000500' }, 'd1-kafe-1400', true);
+    await addManual(admin(), SEED_CONFIG, { name: 'Uanmeldt', phone: '+4740000500' }, 'd1-kafe-1400', true);
     expect(await count('d1-kafe-1400')).toBe(9);
     const s = (await signupsOf())[0];
     expect(s.source).toBe('manuell');
@@ -160,20 +160,20 @@ describe('admin: manuell registrering og endring', () => {
   });
 
   it('anonym kan ikke bruke admin-operasjonene', async () => {
-    await expect(addManual(anon(), SEED_CONFIG, { name: 'X', phone: '40000501' }, 'd1-kafe-1400', true)).rejects.toThrow();
+    await expect(addManual(anon(), SEED_CONFIG, { name: 'X', phone: '+4740000501' }, 'd1-kafe-1400', true)).rejects.toThrow();
   });
 
   it('flytt trekker fra gammelt skift og legger til på nytt', async () => {
-    const id = await addManual(admin(), SEED_CONFIG, { name: 'Flytt', phone: '40000502' }, 'd1-kafe-1600', false);
+    const id = await addManual(admin(), SEED_CONFIG, { name: 'Flytt', phone: '+4740000502' }, 'd1-kafe-1600', false);
     await moveSignup(admin(), SEED_CONFIG, id, 'd2-kafe-1800');
     expect(await count('d1-kafe-1600')).toBe(0);
     expect(await count('d2-kafe-1800')).toBe(1);
-    const p = (await getDoc(doc(admin(), 'people', '40000502'))).data()!;
+    const p = (await getDoc(doc(admin(), 'people', '+4740000502'))).data()!;
     expect(Object.keys(p.shifts)).toEqual(['d2-kafe-1800']);
   });
 
   it('meld av frigjør plassen og beholder raden', async () => {
-    const id = await addManual(admin(), SEED_CONFIG, { name: 'Av', phone: '40000503' }, 'd1-arer-1530', false);
+    const id = await addManual(admin(), SEED_CONFIG, { name: 'Av', phone: '+4740000503' }, 'd1-arer-1530', false);
     expect(await cancelSignup(admin(), id)).toBe('d1-arer-1530');
     expect(await count('d1-arer-1530')).toBe(0);
     const s = (await signupsOf()).find((x: any) => x.id === id);
@@ -185,7 +185,7 @@ describe('admin: manuell registrering og endring', () => {
   it('flytt fra venteliste øker bare det nye skiftet', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'signups', 'vent1'), {
-        name: 'Venter', phone: '40000504', email: '', day: 'd1', timePref: 'hele', source: 'app',
+        name: 'Venter', phone: '+4740000504', email: '', day: 'd1', timePref: 'hele', source: 'app',
         attended: false, createdAt: new Date(), shiftId: null, status: 'venteliste',
       });
     });
@@ -204,8 +204,8 @@ describe('stasjonslenker', () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'access', 'tok-kafe-abcdefghijkl'), { kind: 'stasjon', stationKey: 'kafe', station: 'Kafé' });
     });
-    await addManual(admin(), SEED_CONFIG, { name: 'Kafé-person', phone: '40000600' }, 'd1-kafe-1400', false);
-    await addManual(admin(), SEED_CONFIG, { name: 'Årer-person', phone: '40000601' }, 'd1-arer-1530', false);
+    await addManual(admin(), SEED_CONFIG, { name: 'Kafé-person', phone: '+4740000600' }, 'd1-kafe-1400', false);
+    await addManual(admin(), SEED_CONFIG, { name: 'Årer-person', phone: '+4740000601' }, 'd1-arer-1530', false);
   });
 
   it('uten gyldig lenke får man ikke lese', async () => {
@@ -257,7 +257,7 @@ describe('kaker', () => {
   });
 
   it('anonym kan registrere flere bakverk, men ikke lese dem', async () => {
-    await registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('flotekake', 'd1'), line('vaffel', 'd2')]);
+    await registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('flotekake', 'd1'), line('vaffel', 'd2')]);
     await assertFails(getDocs(collection(anon(), 'cakes')));
     const all = await getDocs(collection(admin(), 'cakes'));
     expect(all.size).toBe(2);
@@ -265,15 +265,15 @@ describe('kaker', () => {
   });
 
   it('avviser ukjent type, ugyldig dag og ferdig avkrysset levert', async () => {
-    await expect(registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('pizza', 'd1')])).rejects.toThrow();
-    await expect(registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('formkake', 'opprigg')])).rejects.toThrow();
+    await expect(registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('pizza', 'd1')])).rejects.toThrow();
+    await expect(registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('formkake', 'opprigg')])).rejects.toThrow();
     await assertFails(setDoc(doc(anon(), 'cakes', 'x'), {
-      regId: 'r', name: 'Juks', phone: '40000701', type: 'formkake', variant: '', glutenFree: false, lactoseFree: false,
+      regId: 'r', name: 'Juks', phone: '+4740000701', type: 'formkake', variant: '', glutenFree: false, lactoseFree: false,
       allergens: '', deliveryDay: 'd1', delivered: true, source: 'app', createdAt: serverTimestamp() }));
   });
 
   it('kakemottak leser og krysser av levert, men endrer ikke annet', async () => {
-    await registerCakes(anon(), { name: 'Kari', phone: '40000700' }, [line('muffins', 'd1')]);
+    await registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('muffins', 'd1')]);
     const db = desk();
     await setDoc(doc(db, 'sessions', 'anon-desk'), { token: 'tok-kake-abcdefghijkl' });
     const snap = await assertSucceeds(getDocs(collection(db, 'cakes')));

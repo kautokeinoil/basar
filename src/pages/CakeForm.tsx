@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { db } from '../firebase';
 import { useConfig, formatDate } from '../lib/useConfig';
-import { normalizePhone } from '../lib/phone';
+import { normalizePhone, type Country } from '../lib/phone';
+import PhoneInput from '../lib/PhoneInput';
 import { cakeTypesOf, emptyLine, registerCakes, type CakeLine } from '../lib/cakes';
 
 export default function CakeForm() {
   const cfg = useConfig();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState<Country>('NO');
   const [lines, setLines] = useState<CakeLine[]>([emptyLine()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -26,9 +28,9 @@ export default function CakeForm() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
-    const p = normalizePhone(phone);
+    const p = normalizePhone(phone, country);
     if (name.trim().length < 2) return setError('Skriv inn fullt navn.');
-    if (!p) return setError('Telefonnummeret må ha 8 siffer.');
+    if (!p) return setError('Sjekk telefonnummeret. Velg riktig land, eller skriv nummeret med landskode (+46 …).');
     const bad = lines.findIndex((l) => !l.type || !l.deliveryDay);
     if (bad >= 0) return setError(`Velg type og leveringsdag for bakverk ${bad + 1}.`);
     setBusy(true);
@@ -66,7 +68,7 @@ export default function CakeForm() {
       <h1>Lever kaker</h1>
       <p className="muted">Meld fra hva du kan bake. Du kan legge til flere bakverk. Hvert levert bakverk gir ett lodd i trekningen.</p>
       <label>Navn<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>
-      <label>Telefon<input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" /></label>
+      <PhoneInput value={phone} country={country} onChange={setPhone} onCountry={setCountry} />
 
       {lines.map((l, i) => (
         <fieldset key={i} className="panel">

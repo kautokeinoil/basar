@@ -105,6 +105,10 @@ function upsertTab_(name, header, rows) {
     if (plan.append.length) sh.getRange(1, plan.from, 1, plan.append.length).setValues([plan.append]).setFontWeight('bold');
   }
 
+  // Telefonnummer (+47…) skal være tekst, ellers gjør Sheets dem om til tall
+  var phoneCol = header.indexOf('Telefon') + 1;
+  if (phoneCol > 0) sh.getRange(2, phoneCol, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+
   var last = sh.getLastRow();
   var ids = last > 1 ? sh.getRange(2, 1, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
   var p = planUpsert_(ids, rows);
@@ -241,6 +245,7 @@ function drawWinner() {
   var read = function (name) { var sh = ss.getSheetByName(name); return sh && sh.getLastRow() > 0 ? sh.getDataRange().getValues() : []; };
   var log = ss.getSheetByName(LOG_TAB) || ss.insertSheet(LOG_TAB);
   if (log.getLastRow() === 0) { log.getRange(1, 1, 1, LOG_HEADER.length).setValues([LOG_HEADER]).setFontWeight('bold'); log.setFrozenRows(1); }
+  log.getRange(1, 6, log.getMaxRows(), 1).setNumberFormat('@');
   var winners = log.getLastRow() > 1 ? log.getRange(2, 6, log.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
 
   var tickets = buildTickets_(read('Vakter'), read('Kaker'), winners);

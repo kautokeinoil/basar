@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { db } from '../firebase';
 import { useConfig, formatDate } from '../lib/useConfig';
-import { normalizePhone } from '../lib/phone';
+import { normalizePhone, type Country } from '../lib/phone';
+import PhoneInput from '../lib/PhoneInput';
 import { signUpForDay } from '../lib/signup';
 import type { Assignment, DayId, TimePref } from '../lib/types';
 
@@ -15,6 +16,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
   const cfg = useConfig();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState<Country>('NO');
   const [days, setDays] = useState<DayId[]>([]);
   const [pref, setPref] = useState<TimePref | ''>('');
   const [busy, setBusy] = useState(false);
@@ -30,9 +32,9 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
-    const p = normalizePhone(phone);
+    const p = normalizePhone(phone, country);
     if (name.trim().length < 2) return setError('Skriv inn fullt navn.');
-    if (!p) return setError('Telefonnummeret må ha 8 siffer.');
+    if (!p) return setError('Sjekk telefonnummeret. Velg riktig land, eller skriv nummeret med landskode (+46 …).');
     if (days.length === 0) return setError('Velg minst én dag.');
     if (needsPref && !pref) return setError('Velg når på dagen det passer.');
 
@@ -64,10 +66,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
         Navn
         <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
       </label>
-      <label>
-        Telefon
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" required />
-      </label>
+      <PhoneInput value={phone} country={country} onChange={setPhone} onCountry={setCountry} />
 
       <fieldset>
         <legend>Hvilke dager kan du?</legend>

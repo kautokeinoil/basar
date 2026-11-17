@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { db } from '../firebase';
+import { auth } from '../auth';
+import { displayPhone } from '../lib/phone';
 import { useConfig, formatDate } from '../lib/useConfig';
 import { cakeTypesOf } from '../lib/cakes';
 
@@ -85,7 +87,7 @@ export default function CakeDesk({ token }: { token: string }) {
                     <input type="checkbox" checked={c.delivered} disabled={busy === c.id} onChange={() => toggle(c)} />
                     <span>
                       <strong>{typeName(c.type)}{c.variant ? `: ${c.variant}` : ''}</strong>
-                      <span>{c.name} · <a href={`tel:${c.phone}`}>{c.phone}</a></span>
+                      <span>{c.name} · <a href={`tel:${c.phone}`}>{displayPhone(c.phone)}</a></span>
                       {(c.glutenFree || c.lactoseFree || c.allergens) && (
                         <small>
                           {[c.glutenFree && 'Glutenfri', c.lactoseFree && 'Laktosefri', c.allergens && `Inneholder: ${c.allergens}`].filter(Boolean).join(' · ')}

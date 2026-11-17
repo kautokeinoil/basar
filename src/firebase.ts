@@ -1,9 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 // Firebase-konfigurasjon er ikke hemmelig; tilgang styres av firestore.rules.
-const app = initializeApp({
+export const app = initializeApp({
   apiKey: 'AIzaSyCCdxHZrBeZZG0kjgjaP2fNbqsaNboo8l8',
   authDomain: 'basar-ba738.firebaseapp.com',
   projectId: 'basar-ba738',
@@ -13,4 +12,3 @@ const app = initializeApp({
 });
 
 export const db = getFirestore(app); // (default)-databasen
-export const auth = getAuth(app);

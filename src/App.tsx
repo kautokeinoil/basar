@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import Home from './pages/Home';
 import VolunteerForm from './pages/VolunteerForm';
 import Confirmation from './pages/Confirmation';
-import Admin from './pages/Admin';
-import Station from './pages/Station';
 import CakeForm from './pages/CakeForm';
-import CakeDesk from './pages/CakeDesk';
+
+// Sider med innlogging lastes bare når de åpnes, så forsiden blir lettere
+const Admin = lazy(() => import('./pages/Admin'));
+const Station = lazy(() => import('./pages/Station'));
+const CakeDesk = lazy(() => import('./pages/CakeDesk'));
 import type { Assignment } from './lib/types';
 
 // Hash-ruting fungerer på GitHub Pages uten serveroppsett.
@@ -43,7 +45,7 @@ export default function App() {
       <header className="top">
         <a href="#/" className="brand">Kautokeino IL · Romjulsbasar</a>
       </header>
-      <main>{page}</main>
+      <main><Suspense fallback={<p className="muted">Laster …</p>}>{page}</Suspense></main>
     </div>
   );
 }

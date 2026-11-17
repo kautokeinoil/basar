@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { db } from '../firebase';
+import { auth } from '../auth';
 import { SEED_CONFIG } from '../config/seed';
-import { normalizePhone } from '../lib/phone';
+import { normalizePhone, type Country } from '../lib/phone';
+import PhoneInput from '../lib/PhoneInput';
 import { addManual, cancelSignup, moveSignup, setAttended, waitlistFor, type SignupRow } from '../lib/adminOps';
 import { newToken, stationKey, stationsOf } from '../lib/station';
 import type { AppConfig, Shift } from '../lib/types';
@@ -158,13 +160,14 @@ function AddPerson({ config, counts, onAdd }: {
 }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState<Country>('NO');
   const [shiftId, setShiftId] = useState('');
   const [now, setNow] = useState(false);
   const [err, setErr] = useState('');
   async function submit() {
-    const p = normalizePhone(phone);
+    const p = normalizePhone(phone, country);
     if (name.trim().length < 2) return setErr('Skriv inn navn.');
-    if (!p) return setErr('Telefon må ha 8 siffer. Uten telefon gis ikke lodd.');
+    if (!p) return setErr('Sjekk telefonnummeret. Uten telefon gis ikke lodd.');
     if (!shiftId) return setErr('Velg skift.');
     setErr('');
     await onAdd({ name: name.trim(), phone: p }, shiftId, now);
@@ -175,7 +178,7 @@ function AddPerson({ config, counts, onAdd }: {
       <summary>Legg til person</summary>
       <div className="form">
         <label>Navn<input value={name} onChange={(e) => setName(e.target.value)} /></label>
-        <label>Telefon<input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" /></label>
+        <PhoneInput value={phone} country={country} onChange={setPhone} onCountry={setCountry} />
         <label>Skift<ShiftSelect config={config} counts={counts} value={shiftId} onChange={setShiftId} /></label>
         <CapacityWarning counts={counts} shiftId={shiftId} config={config} />
         <label className="choice"><input type="checkbox" checked={now} onChange={(e) => setNow(e.target.checked)} /><span>Møtt nå (gir lodd med en gang)</span></label>

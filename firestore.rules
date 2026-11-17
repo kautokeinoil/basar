@@ -63,7 +63,7 @@ service cloud.firestore {
         return d.keys().hasOnly(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'stationKey', 'status'])
           && d.keys().hasAll(['name', 'phone', 'email', 'day', 'timePref', 'source', 'attended', 'createdAt', 'shiftId', 'stationKey', 'status'])
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
-          && d.phone is string && d.phone.matches('^[0-9]{8}$')
+          && d.phone is string && d.phone.matches('^[+][1-9][0-9]{7,14}$')
           && d.email == ''
           && d.stationKey is string
           && d.day in ['opprigg', 'd1', 'd2']
@@ -101,7 +101,7 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isAdmin();
       allow create: if isAdmin() || (
-        phone.matches('^[0-9]{8}$')
+        phone.matches('^[+][1-9][0-9]{7,14}$')
         && request.resource.data.keys().hasOnly(['shifts'])
         && request.resource.data.shifts.keys().size() == 1
       );
@@ -121,7 +121,7 @@ service cloud.firestore {
           && d.keys().hasAll(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'delivered', 'source', 'createdAt'])
           && d.regId is string && d.regId.size() <= 40
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
-          && d.phone is string && d.phone.matches('^[0-9]{8}$')
+          && d.phone is string && d.phone.matches('^[+][1-9][0-9]{7,14}$')
           && d.type in ['flotekake', 'formkake', 'muffins', 'vaffel']
           && d.variant is string && d.variant.size() <= 80
           && d.glutenFree is bool && d.lactoseFree is bool
