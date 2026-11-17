@@ -15,8 +15,7 @@ var MAX_FAILS_BEFORE_MAIL = 3;
 
 var DAY_NAMES = { opprigg: 'Opprigg', d1: 'Basardag 1', d2: 'Basardag 2' };
 var PREF_NAMES = { hele: 'Når som helst', for18: 'Før 18', etter18: 'Etter 18' };
-var LOG_TAB = 'Trekningslogg';
-var LOG_HEADER = ['Tidspunkt', 'Vinner', 'Telefon (siste 3)', 'Personens lodd', 'Lodd totalt', 'Telefon (intern)'];
+var DRAW_HEADER = ['Lodd nr', 'Navn', 'Telefon (siste 3)', 'Gjelder', 'Detaljer'];
 
 var TABS = {
   Vakter: {
@@ -37,7 +36,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Basar')
     .addItem('Synk nå', 'syncNow')
-    .addItem('Trekk vinner', 'drawWinner')
+    .addItem('Lag trekningsliste', 'makeDrawList')
     .addSeparator()
     .addItem('Oppsett (kjør én gang)', 'setup')
     .addToUi();
@@ -163,33 +162,32 @@ function cakeToRow_(d, config) {
 
 /**
  * Lodd: én per vaktskift med Møtt = JA (status aktiv) og én per bakverk med Levert = JA.
- * Personnøkkel er telefonnummeret. Tidligere vinnere er utelukket (én gevinst per person).
+ * Regel B: hver rad er ett lodd. Trekkes samme person flere ganger, vinner hun flere gevinster.
  */
-function buildTickets_(vakter, kaker, excludedPhones) {
-  var ex = {};
-  excludedPhones.forEach(function (p) { ex[String(p)] = true; });
+function buildTickets_(vakter, kaker) {
   var tickets = [];
-  function add(rows, okCol) {
-    if (!rows.length) return;
-    var h = rows[0];
-    var iName = h.indexOf('Navn'), iPhone = h.indexOf('Telefon'), iOk = h.indexOf(okCol), iStatus = h.indexOf('Status');
-    rows.slice(1).forEach(function (r) {
-      var phone = String(r[iPhone] || '');
-      if (!phone || ex[phone] || r[iOk] !== 'JA') return;
-      if (iStatus >= 0 && r[iStatus] !== 'aktiv') return;
-      tickets.push({ name: String(r[iName]), phone: phone });
+  function col(h, name) { return h.indexOf(name); }
+  if (vakter.length) {
+    var h = vakter[0];
+    vakter.slice(1).forEach(function (r) {
+      if (r[col(h, 'Møtt')] !== 'JA' || r[col(h, 'Status')] !== 'aktiv') return;
+      var what = r[col(h, 'Dag')] + ' · ' + r[col(h, 'Stasjon')] + (r[col(h, 'Start')] ? ' ' + r[col(h, 'Start')] + '–' + r[col(h, 'Slutt')] : '');
+      tickets.push({ name: String(r[col(h, 'Navn')]), phone: String(r[col(h, 'Telefon')]), kind: 'Vakt', what: what });
     });
   }
-  add(vakter, 'Møtt');
-  add(kaker, 'Levert');
+  if (kaker.length) {
+    var k = kaker[0];
+    kaker.slice(1).forEach(function (r) {
+      if (r[col(k, 'Levert')] !== 'JA') return;
+      var what = r[col(k, 'Type')] + (r[col(k, 'Variant')] ? ': ' + r[col(k, 'Variant')] : '') + ' · ' + r[col(k, 'Leveringsdag')];
+      tickets.push({ name: String(r[col(k, 'Navn')]), phone: String(r[col(k, 'Telefon')]), kind: 'Kake', what: what });
+    });
+  }
   return tickets;
 }
 
-function pickWinner_(tickets, rnd) {
-  if (!tickets.length) return null;
-  var w = tickets[Math.floor(rnd() * tickets.length)];
-  var own = tickets.filter(function (t) { return t.phone === w.phone; }).length;
-  return { name: w.name, phone: w.phone, own: own, total: tickets.length };
+function drawRows_(tickets) {
+  return tickets.map(function (t, i) { return [i + 1, t.name, '…' + t.phone.slice(-3), t.kind, t.what]; });
 }
 
 function signupToRow_(d, config) {
@@ -238,26 +236,30 @@ function decodeDoc_(doc) {
 
 // ---------- Trekning ----------
 
-function drawWinner() {
+/**
+ * Lager en NY fane med fast trekningsliste (verdier, ingen formler). Fanen endres aldri senere,
+ * så lodd nr peker alltid på samme person. Trekk et tilfeldig tall mellom 1 og antall lodd.
+ */
+function makeDrawList() {
   var ui = SpreadsheetApp.getUi();
   runSync_(false); // ferskeste oppmøte og leveranser
   var ss = SpreadsheetApp.getActive();
   var read = function (name) { var sh = ss.getSheetByName(name); return sh && sh.getLastRow() > 0 ? sh.getDataRange().getValues() : []; };
-  var log = ss.getSheetByName(LOG_TAB) || ss.insertSheet(LOG_TAB);
-  if (log.getLastRow() === 0) { log.getRange(1, 1, 1, LOG_HEADER.length).setValues([LOG_HEADER]).setFontWeight('bold'); log.setFrozenRows(1); }
-  log.getRange(1, 6, log.getMaxRows(), 1).setNumberFormat('@');
-  var winners = log.getLastRow() > 1 ? log.getRange(2, 6, log.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+  var tickets = buildTickets_(read('Vakter'), read('Kaker'));
+  if (!tickets.length) { ui.alert('Ingen lodd ennå: ingen vakter er krysset av som møtt og ingen kaker som levert.'); return; }
 
-  var tickets = buildTickets_(read('Vakter'), read('Kaker'), winners);
-  if (!tickets.length) { ui.alert('Ingen lodd igjen å trekke blant.'); return; }
+  var name = 'Trekningsliste ' + Utilities.formatDate(new Date(), 'Europe/Oslo', 'dd.MM HH:mm');
+  var sh = ss.getSheetByName(name) || ss.insertSheet(name);
+  sh.clear();
+  sh.getRange(1, 1, 1, DRAW_HEADER.length).setValues([DRAW_HEADER]).setFontWeight('bold');
+  sh.getRange(2, 1, tickets.length, DRAW_HEADER.length).setValues(drawRows_(tickets));
+  sh.setFrozenRows(1);
+  sh.autoResizeColumns(1, DRAW_HEADER.length);
+  sh.protect().setDescription('Fast trekningsliste – skal ikke endres').setWarningOnly(true);
+  ss.setActiveSheet(sh);
   var people = {}; tickets.forEach(function (t) { people[t.phone] = true; });
-  var ok = ui.alert('Trekk vinner', tickets.length + ' lodd fordelt på ' + Object.keys(people).length +
-    ' personer. Tidligere vinnere er ikke med.\n\nTrekke nå?', ui.ButtonSet.YES_NO);
-  if (ok !== ui.Button.YES) return;
-
-  var w = pickWinner_(tickets, Math.random);
-  log.appendRow([Utilities.formatDate(new Date(), 'Europe/Oslo', 'yyyy-MM-dd HH:mm:ss'), w.name, '…' + w.phone.slice(-3), w.own, w.total, w.phone]);
-  ui.alert('Vinner: ' + w.name + ' (tlf. …' + w.phone.slice(-3) + ')\n\n' + w.own + ' av ' + w.total + ' lodd. Skrevet i ' + LOG_TAB + '.');
+  ui.alert('Trekningsliste laget: ' + tickets.length + ' lodd fordelt på ' + Object.keys(people).length +
+    ' personer.\n\nTrekk et tilfeldig tall mellom 1 og ' + tickets.length + ', og finn det i kolonnen «Lodd nr».');
 }
 
 // ---------- Firestore REST ----------
@@ -303,5 +305,5 @@ function writeStatus_(started, result, details) {
 // Eksport for Node-tester (ignoreres i Apps Script)
 if (typeof module !== 'undefined') {
   module.exports = { headerPlan_: headerPlan_, planUpsert_: planUpsert_, signupToRow_: signupToRow_, cakeToRow_: cakeToRow_,
-    buildTickets_: buildTickets_, pickWinner_: pickWinner_, decodeDoc_: decodeDoc_, TABS: TABS };
+    buildTickets_: buildTickets_, drawRows_: drawRows_, decodeDoc_: decodeDoc_, TABS: TABS };
 }

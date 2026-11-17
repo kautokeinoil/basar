@@ -9,7 +9,7 @@ vm.runInNewContext(readFileSync('apps-script/Code.gs', 'utf8'), {
   module: mod,
   Utilities: { formatDate: (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ') },
 });
-const { headerPlan_, planUpsert_, signupToRow_, cakeToRow_, buildTickets_, pickWinner_, decodeDoc_, TABS } = mod.exports;
+const { headerPlan_, planUpsert_, signupToRow_, cakeToRow_, buildTickets_, drawRows_, decodeDoc_, TABS } = mod.exports;
 const header = TABS.Vakter.header as string[];
 
 describe('overskrifter', () => {
@@ -93,18 +93,19 @@ describe('kaker og trekning', () => {
     ['k2', 'r', 'Kari', '40000005', 'Formkake', '', 'NEI', 'NEI', '', 'Basardag 1', 'NEI', 'app', '']];
 
   it('lodd: møtt-vakter og leverte kaker, ikke ikke-møtt, avmeldt eller ikke levert', () => {
-    const t = buildTickets_(V, K, []);
-    expect(t.map((x: any) => x.name)).toEqual(['Anne', 'Anne', 'Ole', 'Anne']); // Anne 3, Ole 1 (som eksempelet i spesifikasjonen)
+    const t = buildTickets_(V, K);
+    expect(t.map((x: any) => x.name)).toEqual(['Anne', 'Anne', 'Ole', 'Anne']); // Anne 3, Ole 1
   });
 
-  it('en vinner er utelukket fra neste trekning', () => {
-    const t = buildTickets_(V, K, ['40000001']);
-    expect(t.map((x: any) => x.name)).toEqual(['Ole']);
+  it('regel B: ingen utelukkelse, hver rad er ett lodd', () => {
+    const t = buildTickets_(V, K);
+    expect(t.filter((x: any) => x.phone === '40000001')).toHaveLength(3);
   });
 
-  it('trekning rapporterer personens og totale lodd', () => {
-    const w = pickWinner_(buildTickets_(V, K, []), () => 0);
-    expect(w).toEqual({ name: 'Anne', phone: '40000001', own: 3, total: 4 });
-    expect(pickWinner_([], () => 0)).toBeNull();
+  it('trekningslisten nummereres 1..N med bare siste 3 siffer', () => {
+    const rows = drawRows_(buildTickets_(V, K));
+    expect(rows.map((r: any[]) => r[0])).toEqual([1, 2, 3, 4]);
+    expect(rows[0][2]).toBe('…001');
+    expect(rows[3][3]).toBe('Kake');
   });
 });
