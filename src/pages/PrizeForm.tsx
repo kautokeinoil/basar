@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { useConfig } from '../lib/useConfig';
 import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
-import { emptyPrize, parseWhole, registerPrizes, sponsorExists, sponsorKey, type PrizeLine } from '../lib/prizes';
+import { emptyPrize, MAX_PER_LINE, parseWhole, registerPrizes, sponsorExists, sponsorKey, type PrizeLine } from '../lib/prizes';
 
 function SponsorSearch() {
   const [q, setQ] = useState('');
@@ -56,10 +56,11 @@ export default function PrizeForm() {
     for (const [i, l] of lines.entries()) {
       const qty = parseWhole(l.qty, 1), value = parseWhole(l.value, 0);
       if (l.gift.trim().length < 2) return setError(`Beskriv gevinst ${i + 1}.`);
-      if (qty === null) return setError(`Antall for gevinst ${i + 1} må være et helt tall, minst 1.`);
+      if (qty === null || qty > MAX_PER_LINE) return setError(`Antall for gevinst ${i + 1} må være et helt tall fra 1 til ${MAX_PER_LINE}.`);
       if (value === null) return setError(`Verdi for gevinst ${i + 1} må være et tall i hele kroner. Skriv 0 hvis verdien ikke er kjent.`);
       parsed.push({ gift: l.gift, qty, value });
     }
+    if (parsed.reduce((n, l) => n + l.qty, 0) > 400) return setError('Maks 400 gevinster per innsending. Del opp i flere innsendinger.');
     setBusy(true);
     try {
       await registerPrizes(db, { name: sponsor, contact, phone: p }, parsed);
@@ -105,7 +106,7 @@ export default function PrizeForm() {
               <label>Antall<input value={l.qty} onChange={(e) => update(i, { qty: e.target.value })} inputMode="numeric" /></label>
               <label>Verdi per stk (kr)<input value={l.value} onChange={(e) => update(i, { value: e.target.value })} inputMode="numeric" /></label>
             </div>
-            <small className="muted">Sett 0 hvis verdien ikke er bekreftet.</small>
+            <small className="muted">Sett 0 hvis verdien ikke er bekreftet. Hvert stykk registreres som egen gevinst, så de kan fordeles på ulike basarbøker.</small>
             {lines.length > 1 && (
               <button type="button" className="link" onClick={() => setLines((cur) => cur.filter((_, j) => j !== i))}>Fjern denne gevinsten</button>
             )}

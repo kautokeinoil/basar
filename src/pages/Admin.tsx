@@ -8,7 +8,7 @@ import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
 import { addManual, cancelSignup, moveSignup, setAttended, waitlistFor, type SignupRow } from '../lib/adminOps';
 import { newToken, stationKey, stationsOf } from '../lib/station';
-import { parseWhole, PRIZE_STATUSES, sponsorKey, type Prize, type PrizeStatus } from '../lib/prizes';
+import { type Prize } from '../lib/prizes';
 import type { AppConfig, Shift } from '../lib/types';
 
 type Counts = Record<string, { count: number; max: number }>;
@@ -332,92 +332,18 @@ function Links({ config }: { config: AppConfig }) {
 
 function Prizes() {
   const [prizes, setPrizes] = useState<Prize[] | null>(null);
-  const [edit, setEdit] = useState<Record<string, { sponsor: string; gift: string; qty: string; value: string }>>({});
-  const [filter, setFilter] = useState<PrizeStatus | 'alle'>('alle');
-  const [msg, setMsg] = useState('');
-
-  async function load() {
-    const snap = await getDocs(query(collection(db, 'prizes'), orderBy('createdAt')));
-    setPrizes(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Prize, 'id'>) })));
-  }
-  useEffect(() => { load(); }, []);
-
-  async function setStatus(p: Prize, status: PrizeStatus) {
-    await updateDoc(doc(db, 'prizes', p.id), { status });
-    await load();
-  }
-
-  async function save(p: Prize) {
-    const e = edit[p.id];
-    const qty = parseWhole(e.qty, 1), value = parseWhole(e.value, 0);
-    if (e.sponsor.trim().length < 2 || e.gift.trim().length < 2 || qty === null || value === null) {
-      setMsg('Sjekk feltene: antall minst 1, verdi i hele kroner (0 = ikke bekreftet).');
-      return;
-    }
-    const key = sponsorKey(e.sponsor);
-    await updateDoc(doc(db, 'prizes', p.id), { sponsor: e.sponsor.trim(), sponsorKey: key, gift: e.gift.trim(), qty, value });
-    if (key !== p.sponsorKey) await setDoc(doc(db, 'sponsorIndex', key), { prize: p.id });
-    setEdit(({ [p.id]: _, ...rest }) => rest);
-    setMsg('Lagret.');
-    await load();
-  }
-
-  const shown = (prizes ?? []).filter((p) => filter === 'alle' || p.status === filter);
-  const book = (prizes ?? []).filter((p) => p.status === 'bekreftet' || p.status === 'mottatt');
-  const total = book.reduce((n, p) => n + p.qty * p.value, 0);
-  const unknown = book.filter((p) => p.value === 0).length;
-
+  useEffect(() => {
+    getDocs(collection(db, 'prizes')).then((snap) => setPrizes(snap.docs.map((d) => ({ ...(d.data() as Omit<Prize, 'id'>), book: (d.data().book as string) ?? '', id: d.id }))));
+  }, []);
+  const count = (s: string) => (prizes ?? []).filter((p) => p.status === s).length;
+  const unassigned = (prizes ?? []).filter((p) => p.status !== 'avvist' && !p.book).length;
   return (
-    <details className="panel">
-      <summary>Gevinster · {prizes?.length ?? '…'} registrert</summary>
+    <div className="panel">
+      <strong>Gevinster</strong>
       <p className="muted small">
-        Bekreftet og mottatt: {book.reduce((n, p) => n + p.qty, 0)} stk, verdi {total.toLocaleString('nb-NO')} kr
-        {unknown > 0 ? ` (${unknown} uten oppgitt verdi)` : ''}. Bare disse kommer med i basarboken.
+        {prizes === null ? 'Laster …' : `${prizes.length} totalt · ${count('registrert')} registrert · ${count('bekreftet')} bekreftet · ${count('mottatt')} mottatt · ${count('avvist')} avvist · ${unassigned} ikke fordelt på bok`}
       </p>
-      <label>Vis
-        <select value={filter} onChange={(e) => setFilter(e.target.value as PrizeStatus | 'alle')}>
-          <option value="alle">Alle</option>
-          {PRIZE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </label>
-      {msg && <p className="notice small">{msg}</p>}
-      <ul className="cards">
-        {shown.map((p) => {
-          const e = edit[p.id];
-          return (
-            <li key={p.id} className={`card ${p.status === 'avvist' ? 'dim' : ''}`}>
-              {e ? (
-                <div className="form">
-                  <label>Sponsor<input value={e.sponsor} onChange={(x) => setEdit({ ...edit, [p.id]: { ...e, sponsor: x.target.value } })} /></label>
-                  <label>Gevinst<input value={e.gift} onChange={(x) => setEdit({ ...edit, [p.id]: { ...e, gift: x.target.value } })} /></label>
-                  <div className="row">
-                    <label>Antall<input value={e.qty} inputMode="numeric" onChange={(x) => setEdit({ ...edit, [p.id]: { ...e, qty: x.target.value } })} /></label>
-                    <label>Verdi/stk<input value={e.value} inputMode="numeric" onChange={(x) => setEdit({ ...edit, [p.id]: { ...e, value: x.target.value } })} /></label>
-                  </div>
-                  <div className="row">
-                    <button onClick={() => save(p)}>Lagre</button>
-                    <button className="secondary" onClick={() => setEdit(({ [p.id]: _, ...rest }) => rest)}>Avbryt</button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <strong>{p.sponsor}</strong>
-                  <span>{p.qty} × {p.gift}</span>
-                  <span className="muted small">
-                    {p.value > 0 ? `${p.value.toLocaleString('nb-NO')} kr/stk` : 'Verdi ikke oppgitt'} · {p.contact} · <a href={`tel:${p.phone}`}>{p.phone}</a>
-                  </span>
-                  <div className="row">
-                    <select value={p.status} onChange={(x) => setStatus(p, x.target.value as PrizeStatus)} aria-label="Status">
-                      {PRIZE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <button className="secondary" onClick={() => setEdit({ ...edit, [p.id]: { sponsor: p.sponsor, gift: p.gift, qty: String(p.qty), value: String(p.value) } })}>Rett</button>
-                  </div>
-                </>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </details>
+      <a href="#/admin/gevinster">Åpne gevinstoversikten (best på PC)</a>
+    </div>
   );
 }

@@ -75,3 +75,16 @@ fieldset.panel legend { padding: 0 4px; }
 .people .choice span > span { color: var(--muted); font-size: 15px; }
 .phone { display: grid; grid-template-columns: minmax(0, 9.5em) 1fr; gap: 8px; }
 .phone select { padding: 12px 8px; }
+/* PC-side for gevinster: bredere enn resten av appen */
+.shell:has(.desk) { max-width: 1200px; }
+.desk { display: grid; gap: 12px; }
+.filters, .bulk { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.filters label { min-width: 180px; flex: 1; }
+.bulk { padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.bulk select, .bulk input { width: auto; min-width: 160px; padding: 8px; }
+.bulk button { width: auto; padding: 8px 14px; }
+.bulk summary { cursor: pointer; font-weight: 600; width: 100%; }
+.desk-table td, .desk-table th { text-align: left !important; width: auto !important; vertical-align: middle; }
+.desk-table select { padding: 6px; width: auto; background: transparent; border-color: transparent; color: inherit; }
+.desk-table tr.selected td:not([style]) { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.books td:nth-child(n+2), .books th:nth-child(n+2) { width: 120px; }

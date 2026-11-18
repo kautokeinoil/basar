@@ -9,6 +9,7 @@ import PrizeForm from './pages/PrizeForm';
 const Admin = lazy(() => import('./pages/Admin'));
 const Station = lazy(() => import('./pages/Station'));
 const CakeDesk = lazy(() => import('./pages/CakeDesk'));
+const PrizeDesk = lazy(() => import('./pages/PrizeDesk'));
 import type { Assignment } from './lib/types';
 
 // Hash-ruting fungerer på GitHub Pages uten serveroppsett.
@@ -37,6 +38,8 @@ export default function App() {
     page = <CakeDesk token={path.slice('kake/'.length)} />;
   } else if (path.startsWith('stasjon/')) {
     page = <Station token={path.slice('stasjon/'.length)} />;
+  } else if (path === 'admin/gevinster') {
+    page = <PrizeDesk />;
   } else if (path === 'admin') {
     page = <Admin />;
   } else {

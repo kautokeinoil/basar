@@ -296,7 +296,9 @@ describe('gevinster og sponsorsøk', () => {
   it('anonym kan registrere flere gevinster, men ikke lese dem', async () => {
     await registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 2, value: 500 }, { gift: 'Bensindunk 20 L', qty: 1, value: 0 }]);
     await assertFails(getDocs(collection(anon(), 'prizes')));
-    expect((await getDocs(collection(admin(), 'prizes'))).size).toBe(2);
+    const all = await getDocs(collection(admin(), 'prizes'));
+    expect(all.size).toBe(3); // 2 gavekort blir to egne gevinster
+    expect(all.docs.every((d) => d.data().qty === 1 && d.data().book === '')).toBe(true);
   });
 
   it('søket svarer bare ja/nei, på starten av navnet', async () => {
@@ -321,6 +323,18 @@ describe('gevinster og sponsorsøk', () => {
     await assertFails(setDoc(doc(anon(), 'prizes', 'x'), {
       regId: 'r', sponsor: 'Juks', sponsorKey: 'juks', contact: 'Ja', phone: '+4741234567', gift: 'Bil', qty: 1, value: 1,
       status: 'bekreftet', source: 'app', createdAt: serverTimestamp() }));
+  });
+
+  it('offentlig kan ikke velge bok selv', async () => {
+    await assertFails(setDoc(doc(anon(), 'prizes', 'y'), {
+      regId: 'r', sponsor: 'Coop', sponsorKey: 'coop', contact: 'Ola', phone: '+4741234567', gift: 'Kurv', qty: 1, value: 300,
+      book: 'Basarbok 1', status: 'registrert', source: 'app', createdAt: serverTimestamp() }));
+  });
+
+  it('admin kan legge gevinst i bok', async () => {
+    await registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 1, value: 500 }]);
+    const id = (await getDocs(collection(admin(), 'prizes'))).docs[0].id;
+    await assertSucceeds(updateDoc(doc(admin(), 'prizes', id), { book: 'Basarbok 4' }));
   });
 
   it('bare admin kan endre status', async () => {

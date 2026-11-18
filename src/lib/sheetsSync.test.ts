@@ -119,8 +119,23 @@ describe('gevinster', () => {
     const row = prizeToRow_(doc(500));
     expect(row).toHaveLength(TABS.Gevinster.header.length);
     expect(row.slice(6, 10)).toEqual([3, 500, 1500, 'bekreftet']);
+    expect(row[11]).toBe('');
   });
-  it('verdi 0 betyr ikke oppgitt, ikke gratis', () => {
-    expect(prizeToRow_(doc(0)).slice(7, 9)).toEqual(['ikke oppgitt', '']);
+  it('verdi 0 betyr ikke oppgitt: tom celle, ikke tekst (QUERY dropper tekst i tallkolonner)', () => {
+    expect(prizeToRow_(doc(0)).slice(7, 9)).toEqual(['', '']);
+  });
+  it('bok kommer i siste kolonne', () => {
+    const d = decodeDoc_({ name: 'x/prizes/p2', fields: { qty: { integerValue: '1' }, value: { integerValue: '100' }, book: { stringValue: 'Basarbok 3' } } });
+    expect(prizeToRow_(d)[11]).toBe('Basarbok 3');
+  });
+  it('bokarkets formler bruker riktige kolonner', () => {
+    const bm: { exports: any } = { exports: {} };
+    vm.runInNewContext(readFileSync('apps-script/bokark/Bokark.gs', 'utf8'), { module: bm });
+    expect(bm.exports.BOOKS).toHaveLength(13);
+    const f = bm.exports.bookFormula_('Basarbok 1');
+    expect(f).toContain("Col12 = 'Basarbok 1'");
+    expect(f).toContain('Gevinster!A:L');
+    expect(TABS.Gevinster.header[11]).toBe('Bok');
+    expect(TABS.Gevinster.header[9]).toBe('Status');
   });
 });

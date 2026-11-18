@@ -147,15 +147,16 @@ service cloud.firestore {
     // Gevinster: offentlig kan registrere (validert). Lesing, status og retting kun admin.
     match /prizes/{prizeId} {
       function validPrize(d) {
-        return d.keys().hasOnly(['regId', 'sponsor', 'sponsorKey', 'contact', 'phone', 'gift', 'qty', 'value', 'status', 'source', 'createdAt'])
-          && d.keys().hasAll(['regId', 'sponsor', 'sponsorKey', 'contact', 'phone', 'gift', 'qty', 'value', 'status', 'source', 'createdAt'])
+        return d.keys().hasOnly(['regId', 'sponsor', 'sponsorKey', 'contact', 'phone', 'gift', 'qty', 'value', 'book', 'status', 'source', 'createdAt'])
+          && d.keys().hasAll(['regId', 'sponsor', 'sponsorKey', 'contact', 'phone', 'gift', 'qty', 'value', 'book', 'status', 'source', 'createdAt'])
           && d.regId is string && d.regId.size() <= 40
           && d.sponsor is string && d.sponsor.size() >= 2 && d.sponsor.size() <= 100
           && d.sponsorKey is string && d.sponsorKey.size() >= 3 && d.sponsorKey.size() <= 100 && !d.sponsorKey.matches('.*/.*')
           && d.contact is string && d.contact.size() >= 2 && d.contact.size() <= 80
           && d.phone is string && d.phone.matches('^[+][1-9][0-9]{7,14}$')
           && d.gift is string && d.gift.size() >= 2 && d.gift.size() <= 120
-          && d.qty is int && d.qty >= 1 && d.qty <= 1000
+          && d.qty == 1
+          && d.book == ''
           && d.value is int && d.value >= 0 && d.value <= 10000000
           && d.status == 'registrert'
           && d.source == 'app'

@@ -30,7 +30,7 @@ var TABS = {
   },
   Gevinster: {
     collection: 'prizes',
-    header: ['ID', 'Registrering', 'Sponsor', 'Kontakt', 'Telefon', 'Gevinst', 'Antall', 'Verdi/stk', 'Sum', 'Status', 'Registrert'],
+    header: ['ID', 'Registrering', 'Sponsor', 'Kontakt', 'Telefon', 'Gevinst', 'Antall', 'Verdi/stk', 'Sum', 'Status', 'Registrert', 'Bok'],
     toRow: prizeToRow_,
   },
 };
@@ -42,6 +42,7 @@ function onOpen() {
     .createMenu('Basar')
     .addItem('Synk nå', 'syncNow')
     .addItem('Lag trekningsliste', 'makeDrawList')
+    .addItem('Oppdater Basarbok-fanen (formel og farger)', 'setupBasarbok')
     .addSeparator()
     .addItem('Oppsett (kjør én gang)', 'setup')
     .addToUi();
@@ -145,7 +146,10 @@ function planUpsert_(existingIds, rows) {
   return { updates: updates, appends: appends };
 }
 
-/** Verdi 0 betyr «ikke bekreftet», ikke gratis. Sum står da tom. */
+/**
+ * Verdi 0 betyr «ikke bekreftet», ikke gratis: cellen står da TOM (ikke tekst),
+ * fordi QUERY i Sheets dropper tekst i en tallkolonne.
+ */
 function prizeToRow_(d) {
   var f = d.fields;
   var qty = Number(f.qty || 0), value = Number(f.value || 0);
@@ -157,10 +161,11 @@ function prizeToRow_(d) {
     f.phone || '',
     f.gift || '',
     qty,
-    value > 0 ? value : 'ikke oppgitt',
+    value > 0 ? value : '',
     value > 0 ? qty * value : '',
     f.status || '',
     f.createdAt ? formatTime_(f.createdAt) : '',
+    f.book || '',
   ];
 }
 
@@ -284,6 +289,35 @@ function makeDrawList() {
   var people = {}; tickets.forEach(function (t) { people[t.phone] = true; });
   ui.alert('Trekningsliste laget: ' + tickets.length + ' lodd fordelt på ' + Object.keys(people).length +
     ' personer.\n\nTrekk et tilfeldig tall mellom 1 og ' + tickets.length + ', og finn det i kolonnen «Lodd nr».');
+}
+
+// ---------- Basarbok-fanen ----------
+
+var STATUS_COLORS = { mottatt: '#d9ead3', bekreftet: '#cfe2f3', registrert: '#fce5cd', avvist: '#f4cccc' };
+// setFormula bruker alltid engelsk syntaks (komma), uansett språk i arket
+var BASARBOK_FORMULA = '=QUERY(Gevinster!A:L, "select C, F, H, J, L where A is not null order by C, F", 1)';
+
+/** Fargeregler: hele raden får cellefarge etter status i kolonne `statusCol` (bokstav). */
+function statusColorRules_(sh, statusCol, lastCol) {
+  var range = sh.getRange('A2:' + lastCol);
+  return Object.keys(STATUS_COLORS).map(function (s) {
+    return SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$' + statusCol + '2="' + s + '"')
+      .setBackground(STATUS_COLORS[s])
+      .setRanges([range])
+      .build();
+  });
+}
+
+/** Skriver formelen i A1 på fanen «Basarbok» og legger på statusfarger. Kolonner: Sponsor, Gevinst, Verdi/stk, Status, Bok. */
+function setupBasarbok() {
+  var ss = SpreadsheetApp.getActive();
+  var sh = ss.getSheetByName('Basarbok') || ss.insertSheet('Basarbok');
+  sh.getRange('A1').setFormula(BASARBOK_FORMULA);
+  sh.setConditionalFormatRules(statusColorRules_(sh, 'D', 'E'));
+  sh.setFrozenRows(1);
+  sh.getRange('1:1').setFontWeight('bold');
+  SpreadsheetApp.getActive().toast('Basarbok-fanen er oppdatert.');
 }
 
 // ---------- Firestore REST ----------
