@@ -4,7 +4,7 @@ import { useConfig, formatDate } from '../lib/useConfig';
 const MODULES = [
   { href: '#/frivillig', title: 'Meld deg som frivillig', text: 'Få en tilfeldig vakt på dagen du velger.', open: true },
   { href: '#/kaker', title: 'Lever kaker', text: 'Fløtekake, formkake, muffins/boller eller vaffelrøre.', open: true },
-  { href: '#/gevinster', title: 'Gevinster og sponsing', text: 'Registrer en gevinst eller sjekk om bedriften har sponset.', open: false },
+  { href: '#/gevinster', title: 'Gevinster og sponsing', text: 'Registrer en gevinst eller sjekk om bedriften har sponset.', open: true },
 ];
 
 export default function Home() {

@@ -144,6 +144,41 @@ service cloud.firestore {
         && beforeDeadline();
     }
 
+    // Gevinster: offentlig kan registrere (validert). Lesing, status og retting kun admin.
+    match /prizes/{prizeId} {
+      function validPrize(d) {
+        return d.keys().hasOnly(['regId', 'sponsor', 'sponsorKey', 'contact', 'phone', 'gift', 'qty', 'value', 'status', 'source', 'createdAt'])
+          && d.keys().hasAll(['regId', 'sponsor', 'sponsorKey', 'contact', 'phone', 'gift', 'qty', 'value', 'status', 'source', 'createdAt'])
+          && d.regId is string && d.regId.size() <= 40
+          && d.sponsor is string && d.sponsor.size() >= 2 && d.sponsor.size() <= 100
+          && d.sponsorKey is string && d.sponsorKey.size() >= 3 && d.sponsorKey.size() <= 100 && !d.sponsorKey.matches('.*/.*')
+          && d.contact is string && d.contact.size() >= 2 && d.contact.size() <= 80
+          && d.phone is string && d.phone.matches('^[+][1-9][0-9]{7,14}$')
+          && d.gift is string && d.gift.size() >= 2 && d.gift.size() <= 120
+          && d.qty is int && d.qty >= 1 && d.qty <= 1000
+          && d.value is int && d.value >= 0 && d.value <= 10000000
+          && d.status == 'registrert'
+          && d.source == 'app'
+          && d.createdAt == request.time;
+      }
+      allow read, update, delete: if isAdmin();
+      allow create: if isAdmin() || validPrize(request.resource.data);
+    }
+
+    // Sponsorsøk: bare ja/nei. Én treff om gangen, ingen detaljer.
+    // Et innslag kan bare lages sammen med en ny gevinst for samme sponsor.
+    match /sponsorIndex/{key} {
+      allow get: if true;
+      allow list: if request.query.limit <= 1;
+      allow create, update: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['prize'])
+        && request.resource.data.prize is string
+        && !exists(/databases/$(database)/documents/prizes/$(request.resource.data.prize))
+        && getAfter(/databases/$(database)/documents/prizes/$(request.resource.data.prize)).data.sponsorKey == key
+      );
+      allow delete: if isAdmin();
+    }
+
     // Lenker: kun admin oppretter/sperrer. Den som kjenner koden, kan slå opp stasjonsnavnet.
     match /access/{token} {
       allow get: if true;

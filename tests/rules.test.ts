@@ -9,6 +9,7 @@ import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
 import { addManual, cancelSignup, moveSignup } from '../src/lib/adminOps';
 import { registerCakes, emptyLine } from '../src/lib/cakes';
+import { registerPrizes, sponsorExists } from '../src/lib/prizes';
 
 let env: RulesTestEnvironment;
 const ADMIN = { email: 'pji.idistudios@gmail.com', email_verified: true };
@@ -286,5 +287,46 @@ describe('kaker', () => {
     const db = desk();
     await setDoc(doc(db, 'sessions', 'anon-desk'), { token: 'tok-kafe-abcdefghijkl' });
     await assertFails(getDocs(collection(db, 'cakes')));
+  });
+});
+
+describe('gevinster og sponsorsøk', () => {
+  const rema = { name: 'Rema 1000 Kautokeino', contact: 'Per', phone: '+4741234567' };
+
+  it('anonym kan registrere flere gevinster, men ikke lese dem', async () => {
+    await registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 2, value: 500 }, { gift: 'Bensindunk 20 L', qty: 1, value: 0 }]);
+    await assertFails(getDocs(collection(anon(), 'prizes')));
+    expect((await getDocs(collection(admin(), 'prizes'))).size).toBe(2);
+  });
+
+  it('søket svarer bare ja/nei, på starten av navnet', async () => {
+    await registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 1, value: 500 }]);
+    expect(await sponsorExists(anon(), 'rema')).toBe(true);
+    expect(await sponsorExists(anon(), 'REMA 1000')).toBe(true);
+    expect(await sponsorExists(anon(), 'Coop')).toBe(false);
+  });
+
+  it('kan ikke liste hele sponsorlisten', async () => {
+    await registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 1, value: 500 }]);
+    await assertFails(getDocs(collection(anon(), 'sponsorIndex')));
+  });
+
+  it('kan ikke lage falsk sponsor uten gevinst', async () => {
+    await assertFails(setDoc(doc(anon(), 'sponsorIndex', 'falskeas'), { prize: 'finnesikke' }));
+  });
+
+  it('avviser ugyldig antall, negativ verdi og ferdig bekreftet status', async () => {
+    await expect(registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 0, value: 500 }])).rejects.toThrow();
+    await expect(registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 1, value: -5 }])).rejects.toThrow();
+    await assertFails(setDoc(doc(anon(), 'prizes', 'x'), {
+      regId: 'r', sponsor: 'Juks', sponsorKey: 'juks', contact: 'Ja', phone: '+4741234567', gift: 'Bil', qty: 1, value: 1,
+      status: 'bekreftet', source: 'app', createdAt: serverTimestamp() }));
+  });
+
+  it('bare admin kan endre status', async () => {
+    await registerPrizes(anon(), rema, [{ gift: 'Gavekort', qty: 1, value: 500 }]);
+    const id = (await getDocs(collection(admin(), 'prizes'))).docs[0].id;
+    await assertFails(updateDoc(doc(anon(), 'prizes', id), { status: 'bekreftet' }));
+    await assertSucceeds(updateDoc(doc(admin(), 'prizes', id), { status: 'bekreftet' }));
   });
 });

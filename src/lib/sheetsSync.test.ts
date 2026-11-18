@@ -9,7 +9,7 @@ vm.runInNewContext(readFileSync('apps-script/Code.gs', 'utf8'), {
   module: mod,
   Utilities: { formatDate: (d: Date) => d.toISOString().slice(0, 16).replace('T', ' ') },
 });
-const { headerPlan_, planUpsert_, signupToRow_, cakeToRow_, buildTickets_, drawRows_, decodeDoc_, TABS } = mod.exports;
+const { headerPlan_, planUpsert_, signupToRow_, cakeToRow_, prizeToRow_, buildTickets_, drawRows_, decodeDoc_, TABS } = mod.exports;
 const header = TABS.Vakter.header as string[];
 
 describe('overskrifter', () => {
@@ -107,5 +107,20 @@ describe('kaker og trekning', () => {
     expect(rows.map((r: any[]) => r[0])).toEqual([1, 2, 3, 4]);
     expect(rows[0][2]).toBe('…001');
     expect(rows[3][3]).toBe('Kake');
+  });
+});
+
+describe('gevinster', () => {
+  const doc = (value: number) => decodeDoc_({ name: 'x/prizes/p1', fields: {
+    regId: { stringValue: 'r' }, sponsor: { stringValue: 'Rema 1000 Kautokeino' }, contact: { stringValue: 'Per' },
+    phone: { stringValue: '+4741234567' }, gift: { stringValue: 'Gavekort' }, qty: { integerValue: '3' },
+    value: { integerValue: String(value) }, status: { stringValue: 'bekreftet' } } });
+  it('regner sum', () => {
+    const row = prizeToRow_(doc(500));
+    expect(row).toHaveLength(TABS.Gevinster.header.length);
+    expect(row.slice(6, 10)).toEqual([3, 500, 1500, 'bekreftet']);
+  });
+  it('verdi 0 betyr ikke oppgitt, ikke gratis', () => {
+    expect(prizeToRow_(doc(0)).slice(7, 9)).toEqual(['ikke oppgitt', '']);
   });
 });

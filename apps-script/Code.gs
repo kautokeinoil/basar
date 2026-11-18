@@ -28,6 +28,11 @@ var TABS = {
     header: ['ID', 'Registrering', 'Navn', 'Telefon', 'Type', 'Variant', 'Glutenfri', 'Laktosefri', 'Allergener', 'Leveringsdag', 'Levert', 'Kilde', 'Registrert'],
     toRow: cakeToRow_,
   },
+  Gevinster: {
+    collection: 'prizes',
+    header: ['ID', 'Registrering', 'Sponsor', 'Kontakt', 'Telefon', 'Gevinst', 'Antall', 'Verdi/stk', 'Sum', 'Status', 'Registrert'],
+    toRow: prizeToRow_,
+  },
 };
 
 // ---------- Meny og oppsett ----------
@@ -138,6 +143,25 @@ function planUpsert_(existingIds, rows) {
     if (at) updates.push({ row: at, values: r }); else appends.push(r);
   });
   return { updates: updates, appends: appends };
+}
+
+/** Verdi 0 betyr «ikke bekreftet», ikke gratis. Sum står da tom. */
+function prizeToRow_(d) {
+  var f = d.fields;
+  var qty = Number(f.qty || 0), value = Number(f.value || 0);
+  return [
+    d.id,
+    f.regId || '',
+    f.sponsor || '',
+    f.contact || '',
+    f.phone || '',
+    f.gift || '',
+    qty,
+    value > 0 ? value : 'ikke oppgitt',
+    value > 0 ? qty * value : '',
+    f.status || '',
+    f.createdAt ? formatTime_(f.createdAt) : '',
+  ];
 }
 
 function cakeToRow_(d, config) {
@@ -304,6 +328,6 @@ function writeStatus_(started, result, details) {
 
 // Eksport for Node-tester (ignoreres i Apps Script)
 if (typeof module !== 'undefined') {
-  module.exports = { headerPlan_: headerPlan_, planUpsert_: planUpsert_, signupToRow_: signupToRow_, cakeToRow_: cakeToRow_,
+  module.exports = { headerPlan_: headerPlan_, planUpsert_: planUpsert_, signupToRow_: signupToRow_, cakeToRow_: cakeToRow_, prizeToRow_: prizeToRow_,
     buildTickets_: buildTickets_, drawRows_: drawRows_, decodeDoc_: decodeDoc_, TABS: TABS };
 }
