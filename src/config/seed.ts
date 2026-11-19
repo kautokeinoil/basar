@@ -10,9 +10,12 @@ export const SEED_CONFIG: AppConfig = {
   cakeTypes: [
     { id: 'flotekake', name: 'Fløtekake', unit: '1 kake' },
     { id: 'formkake', name: 'Formkake', unit: '1 kake' },
+    { id: 'formkakesjoko', name: 'Formkake sjokolade', unit: '1 kake' },
     { id: 'muffins', name: 'Muffins/boller', unit: '1 brett' },
     { id: 'vaffel', name: 'Vaffelrøre', unit: '4 liter' },
   ],
+  // Per basardag. 22 kaker per dag som i fjor. Vaffelrøre har ingen grense.
+  cakeLimits: { flotekake: 7, formkake: 6, formkakesjoko: 6, muffins: 3 },
   days: [
     { id: 'opprigg', name: 'Opprigg', date: '2026-12-28' },
     { id: 'd1', name: 'Basardag 1', date: '2026-12-29' },

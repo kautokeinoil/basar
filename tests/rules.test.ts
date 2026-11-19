@@ -8,7 +8,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, 
 import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
 import { addManual, cancelSignup, moveSignup } from '../src/lib/adminOps';
-import { registerCakes, emptyLine } from '../src/lib/cakes';
+import { registerCakes, emptyLine, cakeAvailability, deleteCake } from '../src/lib/cakes';
 import { registerPrizes, sponsorExists } from '../src/lib/prizes';
 
 let env: RulesTestEnvironment;
@@ -258,7 +258,7 @@ describe('kaker', () => {
   });
 
   it('anonym kan registrere flere bakverk, men ikke lese dem', async () => {
-    await registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('flotekake', 'd1'), line('vaffel', 'd2')]);
+    await registerCakes(anon(), SEED_CONFIG, { name: 'Kari', phone: '+4740000700' }, [line('flotekake', 'd1'), line('vaffel', 'd2')]);
     await assertFails(getDocs(collection(anon(), 'cakes')));
     const all = await getDocs(collection(admin(), 'cakes'));
     expect(all.size).toBe(2);
@@ -266,15 +266,15 @@ describe('kaker', () => {
   });
 
   it('avviser ukjent type, ugyldig dag og ferdig avkrysset levert', async () => {
-    await expect(registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('pizza', 'd1')])).rejects.toThrow();
-    await expect(registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('formkake', 'opprigg')])).rejects.toThrow();
+    await expect(registerCakes(anon(), SEED_CONFIG, { name: 'Kari', phone: '+4740000700' }, [line('pizza', 'd1')])).rejects.toThrow();
+    await expect(registerCakes(anon(), SEED_CONFIG, { name: 'Kari', phone: '+4740000700' }, [line('formkake', 'opprigg')])).rejects.toThrow();
     await assertFails(setDoc(doc(anon(), 'cakes', 'x'), {
       regId: 'r', name: 'Juks', phone: '+4740000701', type: 'formkake', variant: '', glutenFree: false, lactoseFree: false,
-      allergens: '', deliveryDay: 'd1', delivered: true, source: 'app', createdAt: serverTimestamp() }));
+      allergens: '', deliveryDay: 'd1', slot: '', delivered: true, source: 'app', createdAt: serverTimestamp() }));
   });
 
   it('kakemottak leser og krysser av levert, men endrer ikke annet', async () => {
-    await registerCakes(anon(), { name: 'Kari', phone: '+4740000700' }, [line('muffins', 'd1')]);
+    await registerCakes(anon(), SEED_CONFIG, { name: 'Kari', phone: '+4740000700' }, [line('muffins', 'd1')]);
     const db = desk();
     await setDoc(doc(db, 'sessions', 'anon-desk'), { token: 'tok-kake-abcdefghijkl' });
     const snap = await assertSucceeds(getDocs(collection(db, 'cakes')));
@@ -342,5 +342,57 @@ describe('gevinster og sponsorsøk', () => {
     const id = (await getDocs(collection(admin(), 'prizes'))).docs[0].id;
     await assertFails(updateDoc(doc(anon(), 'prizes', id), { status: 'bekreftet' }));
     await assertSucceeds(updateDoc(doc(admin(), 'prizes', id), { status: 'bekreftet' }));
+  });
+});
+
+describe('kakekvoter', () => {
+  const line = (type: any, day: any, gf = false) => ({ ...emptyLine(), type, deliveryDay: day, glutenFree: gf });
+  const p = (n: number) => ({ name: `Baker ${n}`, phone: '+4741' + String(100000 + n) });
+
+  it('stopper på kvoten per type og dag, andre dag er uavhengig', async () => {
+    for (let i = 0; i < 3; i++) await registerCakes(anon(), SEED_CONFIG, p(i), [line('muffins', 'd1')]); // kvote 3
+    await expect(registerCakes(anon(), SEED_CONFIG, p(9), [line('muffins', 'd1')])).rejects.toThrow(/Fullt/);
+    await registerCakes(anon(), SEED_CONFIG, p(10), [line('muffins', 'd2')]);
+    const a = await cakeAvailability(anon());
+    expect(a.used['muffins_d1']).toBe(3);
+    expect(a.used['muffins_d2']).toBe(1);
+  });
+
+  it('vaffelrøre har ingen grense', async () => {
+    await registerCakes(anon(), SEED_CONFIG, p(1), Array.from({ length: 12 }, () => line('vaffel', 'd1')));
+    expect((await getDocs(collection(admin(), 'cakes'))).size).toBe(12);
+  });
+
+  it('kan ikke ta plass over kvoten eller uten bakverk, selv om man jukser', async () => {
+    await assertFails(setDoc(doc(anon(), 'cakeSlots', 'muffins_d1_4'), { cake: 'x', gf: false }));
+    await assertFails(setDoc(doc(anon(), 'cakeSlots', 'muffins_d1_1'), { cake: 'finnesikke', gf: false }));
+  });
+
+  it('kvotebakverk uten plass avvises', async () => {
+    await assertFails(setDoc(doc(anon(), 'cakes', 'k'), {
+      regId: 'r', name: 'Juks', phone: '+4741234567', type: 'flotekake', variant: '', glutenFree: false, lactoseFree: false,
+      allergens: '', deliveryDay: 'd1', slot: '', delivered: false, source: 'app', createdAt: serverTimestamp() }));
+  });
+
+  it('samtidige påmeldinger går ikke over kvoten', async () => {
+    const res = await Promise.allSettled(Array.from({ length: 8 }, (_, i) => registerCakes(anon(), SEED_CONFIG, p(i), [line('muffins', 'd2')])));
+    const ok = res.filter((r) => r.status === 'fulfilled').length;
+    expect(ok).toBeLessThanOrEqual(3);
+    expect((await cakeAvailability(anon())).used['muffins_d2'] ?? 0).toBe(ok);
+  }, 60_000);
+
+  it('glutenfri telles i plassene', async () => {
+    await registerCakes(anon(), SEED_CONFIG, p(1), [line('flotekake', 'd1', true), line('formkake', 'd1')]);
+    const a = await cakeAvailability(anon());
+    expect(a.gf['flotekake_d1']).toBe(1);
+    expect(a.gf['formkake_d1'] ?? 0).toBe(0);
+  });
+
+  it('admin-sletting frigjør plassen', async () => {
+    for (let i = 0; i < 3; i++) await registerCakes(anon(), SEED_CONFIG, p(i), [line('muffins', 'd1')]);
+    const first = (await getDocs(collection(admin(), 'cakes'))).docs[0];
+    await deleteCake(admin(), { id: first.id, slot: first.data().slot });
+    await registerCakes(anon(), SEED_CONFIG, p(20), [line('muffins', 'd1')]);
+    expect((await cakeAvailability(anon())).used['muffins_d1']).toBe(3);
   });
 });

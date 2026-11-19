@@ -14,7 +14,7 @@ export interface Shift {
   priority: number;  // 1 fylles først i fase 2
 }
 
-export type CakeTypeId = 'flotekake' | 'formkake' | 'muffins' | 'vaffel';
+export type CakeTypeId = 'flotekake' | 'formkake' | 'formkakesjoko' | 'muffins' | 'vaffel';
 export interface CakeType { id: CakeTypeId; name: string; unit: string }
 
 export interface AppConfig {
@@ -24,6 +24,8 @@ export interface AppConfig {
   days: Day[];
   shifts: Shift[];
   cakeTypes?: CakeType[];
+  /** Maks antall per dag per kaketype. Typer som mangler her, har ingen grense. */
+  cakeLimits?: Partial<Record<CakeTypeId, number>>;
 }
 
 export interface Assignment {

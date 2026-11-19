@@ -131,10 +131,15 @@ describe('gevinster', () => {
   it('bokarkets formler bruker riktige kolonner', () => {
     const bm: { exports: any } = { exports: {} };
     vm.runInNewContext(readFileSync('apps-script/bokark/Bokark.gs', 'utf8'), { module: bm });
-    expect(bm.exports.BOOKS).toHaveLength(13);
+    expect(bm.exports.BOOKS).toHaveLength(12); // Årer skrives ikke ut
+    expect(bm.exports.BOOKS[0]).toEqual({ book: 'Basarbok 1', tab: 'Girji 1', title: 'Girji #1' });
     const f = bm.exports.bookFormula_('Basarbok 1');
     expect(f).toContain("Col12 = 'Basarbok 1'");
+    expect(f).toContain("(Col10 = 'bekreftet' or Col10 = 'mottatt')"); // bare bekreftede på trykk
+    expect(f).toContain('order by Col8 desc'); // høyeste verdi først
+    expect(f).toContain('"Sum:"');
     expect(f).toContain('Gevinster!A:L');
+    expect(bm.exports.exportParams_(5, 12)).toContain('size=A5');
     expect(TABS.Gevinster.header[11]).toBe('Bok');
     expect(TABS.Gevinster.header[9]).toBe('Status');
   });

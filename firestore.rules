@@ -29,6 +29,11 @@ service cloud.firestore {
       return hasSession() && link().kind == 'stasjon' && link().stationKey == key;
     }
 
+    // Kvoter per kaketype per dag, fra oppsettet (config/main.cakeLimits)
+    function cakeLimits() {
+      return get(/databases/$(database)/documents/config/main).data.get('cakeLimits', {});
+    }
+
     function counterPath(shiftId) {
       return /databases/$(database)/documents/shiftCounts/$(shiftId);
     }
@@ -117,19 +122,29 @@ service cloud.firestore {
     // Kaketypene må stemme med config (cakeTypes); legges en type til, må den også inn her.
     match /cakes/{cakeId} {
       function validCake(d) {
-        return d.keys().hasOnly(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'delivered', 'source', 'createdAt'])
-          && d.keys().hasAll(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'delivered', 'source', 'createdAt'])
+        return d.keys().hasOnly(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'slot', 'delivered', 'source', 'createdAt'])
+          && d.keys().hasAll(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'slot', 'delivered', 'source', 'createdAt'])
           && d.regId is string && d.regId.size() <= 40
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
           && d.phone is string && d.phone.matches('^[+][1-9][0-9]{7,14}$')
-          && d.type in ['flotekake', 'formkake', 'muffins', 'vaffel']
+          && d.type in ['flotekake', 'formkake', 'formkakesjoko', 'muffins', 'vaffel']
           && d.variant is string && d.variant.size() <= 80
           && d.glutenFree is bool && d.lactoseFree is bool
           && d.allergens is string && d.allergens.size() <= 200
           && d.deliveryDay in ['d1', 'd2']
           && d.delivered == false
           && d.source == 'app'
-          && d.createdAt == request.time;
+          && d.createdAt == request.time
+          && validSlot(d);
+      }
+      // Kaketyper med kvote må ha en plass (cakeSlots) som peker tilbake på dette bakverket
+      function validSlot(d) {
+        return d.slot is string && (
+          (!(d.type in cakeLimits()) && d.slot == '')
+          || (d.type in cakeLimits()
+              && d.slot.matches('^' + d.type + '_' + d.deliveryDay + '_[0-9]+$')
+              && getAfter(/databases/$(database)/documents/cakeSlots/$(d.slot)).data.cake == cakeId)
+        );
       }
       function cakeLink() {
         return hasSession() && link().kind == 'kake';
@@ -142,6 +157,23 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['delivered'])
         && request.resource.data.delivered is bool
         && beforeDeadline();
+    }
+
+    // Kakeplasser: {type}_{dag}_{nr}. Kan bare opprettes én gang og bare innenfor kvoten.
+    // Inneholder ingen personopplysninger (bare ID-en til bakverket og om det er glutenfritt).
+    match /cakeSlots/{slotId} {
+      allow get, list: if true;
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['cake', 'gf'])
+        && request.resource.data.gf is bool
+        && !exists(/databases/$(database)/documents/cakes/$(request.resource.data.cake))
+        && getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data.slot == slotId
+        && getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data.glutenFree == request.resource.data.gf
+        && slotId.split('_')[0] in cakeLimits()
+        && int(slotId.split('_')[2]) >= 1
+        && int(slotId.split('_')[2]) <= cakeLimits()[slotId.split('_')[0]]
+      );
+      allow update, delete: if isAdmin();
     }
 
     // Gevinster: offentlig kan registrere (validert). Lesing, status og retting kun admin.

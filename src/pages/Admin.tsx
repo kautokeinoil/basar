@@ -9,6 +9,7 @@ import PhoneInput from '../lib/PhoneInput';
 import { addManual, cancelSignup, moveSignup, setAttended, waitlistFor, type SignupRow } from '../lib/adminOps';
 import { newToken, stationKey, stationsOf } from '../lib/station';
 import { type Prize } from '../lib/prizes';
+import { cakeLimitsOf, cakeTypesOf, deleteCake } from '../lib/cakes';
 import type { AppConfig, Shift } from '../lib/types';
 
 type Counts = Record<string, { count: number; max: number }>;
@@ -49,7 +50,20 @@ export default function Admin() {
     const cfgRef = doc(db, 'config', 'main');
     const cfgSnap = await getDoc(cfgRef);
     if (!cfgSnap.exists()) await setDoc(cfgRef, SEED_CONFIG);
-    else if (!cfgSnap.data().cakeTypes) await updateDoc(cfgRef, { cakeTypes: SEED_CONFIG.cakeTypes });
+    else {
+      // Nye kaketyper legges til (eksisterende rørt ikke), kvoter settes hvis de mangler
+      const cur = cfgSnap.data() as AppConfig;
+      const have = new Set((cur.cakeTypes ?? []).map((t) => t.id));
+      const seedIds = new Set(SEED_CONFIG.cakeTypes!.map((t) => t.id));
+      const merged = [
+        ...SEED_CONFIG.cakeTypes!.map((t) => (cur.cakeTypes ?? []).find((x) => x.id === t.id) ?? t),
+        ...(cur.cakeTypes ?? []).filter((t) => !seedIds.has(t.id)),
+      ];
+      const patch: Record<string, unknown> = {};
+      if (SEED_CONFIG.cakeTypes!.some((t) => !have.has(t.id))) patch.cakeTypes = merged;
+      if (!cur.cakeLimits) patch.cakeLimits = SEED_CONFIG.cakeLimits;
+      if (Object.keys(patch).length) await updateDoc(cfgRef, patch);
+    }
     let created = 0;
     for (const s of SEED_CONFIG.shifts) {
       const ref = doc(db, 'shiftCounts', s.id);
@@ -111,6 +125,7 @@ export default function Admin() {
             })}
             onAttended={(id, v) => run(v ? 'Registrert som møtt.' : 'Oppmøte fjernet.', () => setAttended(db, id, v))} />
           <Prizes />
+          <Cakes config={config} />
           <Links config={config} />
           <Overview config={config} counts={counts} signups={signups} />
           <details className="small">
@@ -345,5 +360,52 @@ function Prizes() {
       </p>
       <a href="#/admin/gevinster">Åpne gevinstoversikten (best på PC)</a>
     </div>
+  );
+}
+
+interface CakeRow { id: string; name: string; phone: string; type: string; variant: string; deliveryDay: string; slot?: string; delivered: boolean; glutenFree: boolean }
+
+function Cakes({ config }: { config: AppConfig }) {
+  const [cakes, setCakes] = useState<CakeRow[] | null>(null);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const load = () => getDocs(collection(db, 'cakes')).then((s) => setCakes(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CakeRow, 'id'>) }))));
+  useEffect(() => { load(); }, []);
+  const types = cakeTypesOf(config);
+  const limits = cakeLimitsOf(config);
+  const days = config.days.filter((d) => d.id !== 'opprigg');
+
+  return (
+    <details className="panel">
+      <summary>Kaker · {cakes?.length ?? '…'} registrert</summary>
+      <table className="table">
+        <thead><tr><th>Type</th>{days.map((d) => <th key={d.id}>{d.name}</th>)}</tr></thead>
+        <tbody>
+          {types.map((t) => (
+            <tr key={t.id}>
+              <td>{t.name}</td>
+              {days.map((d) => {
+                const n = (cakes ?? []).filter((c) => c.type === t.id && c.deliveryDay === d.id).length;
+                const max = limits[t.id];
+                return <td key={d.id} className={max && n >= max ? 'full' : ''}>{max ? `${n}/${max}` : n}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted small">Sletting frigjør plassen, så noen andre kan melde seg på. Raden i arket blir stående til du sletter den der.</p>
+      <ul className="plain">
+        {(cakes ?? []).sort((a, b) => a.deliveryDay.localeCompare(b.deliveryDay) || a.name.localeCompare(b.name, 'nb')).map((c) => (
+          <li key={c.id}>
+            {config.days.find((d) => d.id === c.deliveryDay)?.name}: {types.find((t) => t.id === c.type)?.name ?? c.type}
+            {c.variant ? ` (${c.variant})` : ''}{c.glutenFree ? ' · glutenfri' : ''} – {c.name}{' '}
+            {confirm === c.id ? (
+              <button className="link" onClick={async () => { await deleteCake(db, c); setConfirm(null); load(); }}>Bekreft sletting</button>
+            ) : (
+              <button className="link" onClick={() => setConfirm(c.id)}>Slett</button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
