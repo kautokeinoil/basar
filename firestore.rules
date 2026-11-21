@@ -34,6 +34,20 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/config/main).data.get('cakeLimits', {});
     }
 
+    // Ekstra kaker per dag når kvoten er full (0 = ingen grense)
+    function cakeExtraCap() {
+      return get(/databases/$(database)/documents/config/main).data.get('cakeExtraPerDay', 0);
+    }
+    // Kvoten for en dag er full når siste plass for hver kvotetype finnes (etter denne skrivingen).
+    // Kvotetypene må stå her og i cakeLimits i oppsettet.
+    function lastSlotTaken(type, day) {
+      return existsAfter(/databases/$(database)/documents/cakeSlots/$(type + '_' + day + '_' + string(cakeLimits()[type])));
+    }
+    function cakeDayFull(day) {
+      return lastSlotTaken('flotekake', day) && lastSlotTaken('formkake', day)
+        && lastSlotTaken('formkakesjoko', day) && lastSlotTaken('muffins', day);
+    }
+
     function counterPath(shiftId) {
       return /databases/$(database)/documents/shiftCounts/$(shiftId);
     }
@@ -142,7 +156,8 @@ service cloud.firestore {
         return d.slot is string && (
           (!(d.type in cakeLimits()) && d.slot == '')
           || (d.type in cakeLimits()
-              && d.slot.matches('^' + d.type + '_' + d.deliveryDay + '_[0-9]+$')
+              && (d.slot.matches('^' + d.type + '_' + d.deliveryDay + '_[0-9]+$')
+                  || d.slot.matches('^ekstra_' + d.deliveryDay + '_[0-9]+$'))
               && getAfter(/databases/$(database)/documents/cakeSlots/$(d.slot)).data.cake == cakeId)
         );
       }
@@ -169,9 +184,15 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/cakes/$(request.resource.data.cake))
         && getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data.slot == slotId
         && getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data.glutenFree == request.resource.data.gf
-        && slotId.split('_')[0] in cakeLimits()
         && int(slotId.split('_')[2]) >= 1
-        && int(slotId.split('_')[2]) <= cakeLimits()[slotId.split('_')[0]]
+        && (
+          (slotId.split('_')[0] in cakeLimits()
+            && int(slotId.split('_')[2]) <= cakeLimits()[slotId.split('_')[0]])
+          ||
+          (slotId.split('_')[0] == 'ekstra'
+            && cakeDayFull(slotId.split('_')[1])
+            && (cakeExtraCap() == 0 || int(slotId.split('_')[2]) <= cakeExtraCap()))
+        )
       );
       allow update, delete: if isAdmin();
     }

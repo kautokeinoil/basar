@@ -26,6 +26,8 @@ export interface AppConfig {
   cakeTypes?: CakeType[];
   /** Maks antall per dag per kaketype. Typer som mangler her, har ingen grense. */
   cakeLimits?: Partial<Record<CakeTypeId, number>>;
+  /** Ekstra kaker per dag NÅR alle kvoteplassene er tatt. 0 eller mangler = ingen grense. */
+  cakeExtraPerDay?: number;
 }
 
 export interface Assignment {

@@ -396,3 +396,39 @@ describe('kakekvoter', () => {
     expect((await cakeAvailability(anon())).used['muffins_d1']).toBe(3);
   });
 });
+
+describe('ekstra kaker når kvoten er full', () => {
+  const line = (type: any, day: any) => ({ ...emptyLine(), type, deliveryDay: day });
+  const p = (n: number) => ({ name: `Baker ${n}`, phone: '+4742' + String(100000 + n) });
+  const fillDay = async (day: string) => {
+    const all = [...Array(7).fill('flotekake'), ...Array(6).fill('formkake'), ...Array(6).fill('formkakesjoko'), ...Array(3).fill('muffins')];
+    await registerCakes(anon(), SEED_CONFIG, p(0), all.map((t) => line(t, day)));
+  };
+
+  it('en type er stengt så lenge ikke alle 22 plassene er tatt', async () => {
+    for (let i = 0; i < 6; i++) await registerCakes(anon(), SEED_CONFIG, p(i), [line('formkake', 'd1')]);
+    await expect(registerCakes(anon(), SEED_CONFIG, p(7), [line('formkake', 'd1')])).rejects.toThrow(/Fullt/);
+    await assertFails(setDoc(doc(anon(), 'cakeSlots', 'ekstra_d1_1'), { cake: 'x', gf: false }));
+  });
+
+  it('når alle 22 er tatt, åpner alle typene igjen som ekstra', async () => {
+    await fillDay('d1');
+    await registerCakes(anon(), SEED_CONFIG, p(30), [line('flotekake', 'd1'), line('muffins', 'd1')]);
+    const a = await cakeAvailability(anon());
+    expect(a.used['ekstra_d1']).toBe(2);
+    // dag 2 er fortsatt på vanlig kvote
+    for (let i = 0; i < 3; i++) await registerCakes(anon(), SEED_CONFIG, p(40 + i), [line('muffins', 'd2')]);
+    await expect(registerCakes(anon(), SEED_CONFIG, p(50), [line('muffins', 'd2')])).rejects.toThrow(/Fullt/);
+  }, 60_000);
+
+  it('grense for ekstra kan settes i oppsettet', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'config', 'main'), { ...SEED_CONFIG, cakeExtraPerDay: 2 });
+    });
+    const cfg = { ...SEED_CONFIG, cakeExtraPerDay: 2 };
+    await fillDay('d2');
+    await registerCakes(anon(), cfg, p(60), [line('flotekake', 'd2'), line('formkake', 'd2')]);
+    await expect(registerCakes(anon(), cfg, p(61), [line('flotekake', 'd2')])).rejects.toThrow(/Fullt/);
+    await assertFails(setDoc(doc(anon(), 'cakeSlots', 'ekstra_d2_3'), { cake: 'x', gf: false }));
+  }, 60_000);
+});

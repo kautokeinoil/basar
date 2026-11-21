@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { useConfig, formatDate } from '../lib/useConfig';
 import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
-import { cakeAvailability, cakeLimitsOf, cakeTypesOf, emptyLine, FullError, registerCakes, slotKey, type Availability, type CakeLine } from '../lib/cakes';
+import { baseFull, cakeAvailability, cakeLimitsOf, extraLeft, cakeTypesOf, emptyLine, FullError, registerCakes, slotKey, type Availability, type CakeLine } from '../lib/cakes';
 import type { CakeTypeId } from '../lib/types';
 
 export default function CakeForm() {
@@ -32,10 +32,16 @@ export default function CakeForm() {
   const left = (type: CakeTypeId, day: string, exceptLine: number) => {
     const max = limits[type];
     if (!max || !day) return Infinity;
-    const used = avail?.used[slotKey(type, day)] ?? 0;
+    const used = avail?.used ?? {};
     const inForm = lines.filter((l, j) => j !== exceptLine && l.type === type && l.deliveryDay === day).length;
-    return max - used - inForm;
+    const base = max - (used[slotKey(type, day)] ?? 0) - inForm;
+    if (base > 0) return base;
+    // Kvoten for typen er full: ekstraplasser åpner når alle 22 plassene for dagen er tatt
+    const extrasInForm = lines.filter((l, j) => j !== exceptLine && l.deliveryDay === day && limits[l.type as CakeTypeId]
+      && (used[slotKey(l.type, day)] ?? 0) >= limits[l.type as CakeTypeId]!).length;
+    return extraLeft(config, used, day) - extrasInForm;
   };
+  const isExtra = (day: string) => !!avail && !!day && baseFull(config, avail.used, day);
 
   // Glutenfritt så langt, blant kaker med kvote
   const totalUsed = Object.values(avail?.used ?? {}).reduce((a, b) => a + b, 0);
@@ -60,7 +66,12 @@ export default function CakeForm() {
     } catch (err) {
       console.error(err);
       if (err instanceof FullError) {
-        setError(`Det ble akkurat fullt for ${typeName(err.type).toLowerCase()} til ${dayName(err.day)}. Velg en annen type eller dag.`);
+        if (err.saved > 0) {
+          setLines((cur) => cur.slice(err.saved));
+          setError(`${err.saved} bakverk ble registrert. Så ble det fullt for ${typeName(err.type).toLowerCase()} til ${dayName(err.day)}. Velg en annen type eller dag for resten, og send igjen.`);
+        } else {
+          setError(`Det ble akkurat fullt for ${typeName(err.type).toLowerCase()} til ${dayName(err.day)}. Velg en annen type eller dag.`);
+        }
       } else {
         setError('Noe gikk galt. Prøv igjen, eller kontakt oss.');
       }
@@ -118,7 +129,11 @@ export default function CakeForm() {
                   <input type="radio" name={`type-${i}`} checked={l.type === t.id} disabled={full && l.type !== t.id}
                     onChange={() => update(i, { type: t.id })} />
                   {t.name}
-                  <small>{full ? 'Nok for denne dagen' : l.deliveryDay && Number.isFinite(n) ? `${t.unit} · ${n} igjen` : t.unit}</small>
+                  <small>
+                    {full ? 'Nok for denne dagen'
+                      : isExtra(l.deliveryDay) && limits[t.id] ? (Number.isFinite(n) ? `Ekstra · ${n} igjen` : 'Ekstra plass')
+                      : l.deliveryDay && Number.isFinite(n) ? `${t.unit} · ${n} igjen` : t.unit}
+                  </small>
                 </label>
               );
             })}

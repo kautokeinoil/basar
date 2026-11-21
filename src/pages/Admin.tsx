@@ -390,6 +390,10 @@ function Cakes({ config }: { config: AppConfig }) {
               })}
             </tr>
           ))}
+          <tr>
+            <td>Herav ekstra (etter at kvoten er full)</td>
+            {days.map((d) => <td key={d.id}>{(cakes ?? []).filter((c) => c.deliveryDay === d.id && c.slot?.startsWith('ekstra_')).length}{config.cakeExtraPerDay ? `/${config.cakeExtraPerDay}` : ''}</td>)}
+          </tr>
         </tbody>
       </table>
       <p className="muted small">Sletting frigjør plassen, så noen andre kan melde seg på. Raden i arket blir stående til du sletter den der.</p>
