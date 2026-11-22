@@ -7,7 +7,7 @@ import {
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch, serverTimestamp, type Firestore } from 'firebase/firestore';
 import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
-import { addManual, cancelSignup, moveSignup } from '../src/lib/adminOps';
+import { addManual, cancelSignup, moveSignup, setPublicName } from '../src/lib/adminOps';
 import { registerCakes, emptyLine, cakeAvailability, deleteCake } from '../src/lib/cakes';
 import { registerPrizes, sponsorExists } from '../src/lib/prizes';
 
@@ -431,4 +431,39 @@ describe('ekstra kaker når kvoten er full', () => {
     await expect(registerCakes(anon(), cfg, p(61), [line('flotekake', 'd2')])).rejects.toThrow(/Fullt/);
     await assertFails(setDoc(doc(anon(), 'cakeSlots', 'ekstra_d2_3'), { cake: 'x', gf: false }));
   }, 60_000);
+});
+
+describe('offentlig vaktliste', () => {
+  const roster = async () => (await getDocs(collection(anon(), 'publicRoster'))).docs.map((d) => ({ id: d.id, ...d.data() }) as any);
+
+  it('med samtykke: navn og skift vises for alle, aldri telefon', async () => {
+    const r = await signUpForDay(anon(), SEED_CONFIG, { ...person(1), publicName: true }, 'd1', 'hele');
+    const list = await roster();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ name: 'Test 1', shiftId: r.shift!.id });
+    expect(Object.keys(list[0]).sort()).toEqual(['id', 'name', 'shiftId']);
+  });
+
+  it('uten samtykke: ingen oppføring, og man kan ikke legge seg inn i etterkant', async () => {
+    await signUpForDay(anon(), SEED_CONFIG, person(2), 'd1', 'hele');
+    expect(await roster()).toHaveLength(0);
+    const id = (await getDocs(collection(admin(), 'signups'))).docs[0].id;
+    await assertFails(setDoc(doc(anon(), 'publicRoster', id), { name: 'Test 2', shiftId: 'd1-kafe-1400' }));
+  });
+
+  it('kan ikke legge falske navn på listen', async () => {
+    await assertFails(setDoc(doc(anon(), 'publicRoster', 'falsk'), { name: 'Kjendis', shiftId: 'd1-kafe-1400' }));
+  });
+
+  it('flytting og avmelding følger med, admin kan slå av og på', async () => {
+    const id = await addManual(admin(), SEED_CONFIG, { name: 'Synlig', phone: '+4740000800' }, 'd1-kafe-1400', false, true);
+    await moveSignup(admin(), SEED_CONFIG, id, 'd2-kafe-1600');
+    expect((await roster())[0].shiftId).toBe('d2-kafe-1600');
+    await setPublicName(admin(), id, false);
+    expect(await roster()).toHaveLength(0);
+    await setPublicName(admin(), id, true);
+    expect(await roster()).toHaveLength(1);
+    await cancelSignup(admin(), id);
+    expect(await roster()).toHaveLength(0);
+  });
 });

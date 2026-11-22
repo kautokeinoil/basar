@@ -19,6 +19,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
   const [country, setCountry] = useState<Country>('NO');
   const [days, setDays] = useState<DayId[]>([]);
   const [pref, setPref] = useState<TimePref | ''>('');
+  const [publicName, setPublicName] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,7 +41,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
 
     setBusy(true);
     try {
-      const person = { name: name.trim(), phone: p };
+      const person = { name: name.trim(), phone: p, publicName };
       const results: Assignment[] = [];
       // Én transaksjon per dag, i dagenes rekkefølge
       for (const d of config.days.map((x) => x.id).filter((id) => days.includes(id))) {
@@ -99,8 +100,15 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
         </fieldset>
       )}
 
+      <label className="choice">
+        <input type="checkbox" checked={publicName} onChange={(e) => setPublicName(e.target.checked)} />
+        <span>
+          <strong>Navnet mitt kan vises på den offentlige vaktlisten</strong>
+          <small>Listen deles på Facebook, så andre ser hvem som jobber når. Telefonnummeret vises aldri. Valgfritt.</small>
+        </span>
+      </label>
       <p className="muted small">
-        Navn og telefon brukes bare til å organisere basaren og trekningen, og slettes etterpå.
+        Navn og telefon brukes ellers bare til å organisere basaren og trekningen, og slettes etterpå.
       </p>
       {error && <p className="error" role="alert">{error}</p>}
       <button type="submit" disabled={busy}>{busy ? 'Tildeler vakt …' : 'Send påmelding'}</button>

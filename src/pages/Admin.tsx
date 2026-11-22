@@ -6,7 +6,7 @@ import { auth } from '../auth';
 import { SEED_CONFIG } from '../config/seed';
 import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
-import { addManual, cancelSignup, moveSignup, setAttended, waitlistFor, type SignupRow } from '../lib/adminOps';
+import { addManual, cancelSignup, moveSignup, setAttended, setPublicName, waitlistFor, type SignupRow } from '../lib/adminOps';
 import { newToken, stationKey, stationsOf } from '../lib/station';
 import { type Prize } from '../lib/prizes';
 import { cakeLimitsOf, cakeTypesOf, deleteCake } from '../lib/cakes';
@@ -111,7 +111,7 @@ export default function Admin() {
               onClose={() => setFreed(null)} />
           )}
           <AddPerson config={config} counts={counts}
-            onAdd={(p, shiftId, now) => run('Lagt til.', () => addManual(db, config, p, shiftId, now))} />
+            onAdd={(p, shiftId, now, pub) => run('Lagt til.', () => addManual(db, config, p, shiftId, now, pub))} />
           <FindPerson config={config} counts={counts} signups={signups}
             onMove={(id, shiftId) => run('Vakten er flyttet.', async () => {
               const before = signups.find((s) => s.id === id);
@@ -123,7 +123,8 @@ export default function Admin() {
               const f = await cancelSignup(db, id);
               setFreed(f ? config.shifts.find((s) => s.id === f) ?? null : null);
             })}
-            onAttended={(id, v) => run(v ? 'Registrert som møtt.' : 'Oppmøte fjernet.', () => setAttended(db, id, v))} />
+            onAttended={(id, v) => run(v ? 'Registrert som møtt.' : 'Oppmøte fjernet.', () => setAttended(db, id, v))}
+            onPublic={(id, v) => run(v ? 'Vises nå på den offentlige vaktlisten.' : 'Fjernet fra den offentlige vaktlisten.', () => setPublicName(db, id, v))} />
           <Prizes />
           <Cakes config={config} />
           <Links config={config} />
@@ -173,13 +174,14 @@ function CapacityWarning({ counts, shiftId, config }: { counts: Counts; shiftId:
 
 function AddPerson({ config, counts, onAdd }: {
   config: AppConfig; counts: Counts;
-  onAdd: (p: { name: string; phone: string }, shiftId: string, now: boolean) => Promise<void>;
+  onAdd: (p: { name: string; phone: string }, shiftId: string, now: boolean, pub: boolean) => Promise<void>;
 }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [country, setCountry] = useState<Country>('NO');
   const [shiftId, setShiftId] = useState('');
   const [now, setNow] = useState(false);
+  const [pub, setPub] = useState(false);
   const [err, setErr] = useState('');
   async function submit() {
     const p = normalizePhone(phone, country);
@@ -187,8 +189,8 @@ function AddPerson({ config, counts, onAdd }: {
     if (!p) return setErr('Sjekk telefonnummeret. Uten telefon gis ikke lodd.');
     if (!shiftId) return setErr('Velg skift.');
     setErr('');
-    await onAdd({ name: name.trim(), phone: p }, shiftId, now);
-    setName(''); setPhone(''); setShiftId(''); setNow(false);
+    await onAdd({ name: name.trim(), phone: p }, shiftId, now, pub);
+    setName(''); setPhone(''); setShiftId(''); setNow(false); setPub(false);
   }
   return (
     <details className="panel" open>
@@ -199,6 +201,7 @@ function AddPerson({ config, counts, onAdd }: {
         <label>Skift<ShiftSelect config={config} counts={counts} value={shiftId} onChange={setShiftId} /></label>
         <CapacityWarning counts={counts} shiftId={shiftId} config={config} />
         <label className="choice"><input type="checkbox" checked={now} onChange={(e) => setNow(e.target.checked)} /><span>Møtt nå (gir lodd med en gang)</span></label>
+        <label className="choice"><input type="checkbox" checked={pub} onChange={(e) => setPub(e.target.checked)} /><span>Personen samtykker til å stå med navn på den offentlige vaktlisten</span></label>
         {err && <p className="error">{err}</p>}
         <button onClick={submit}>Legg til</button>
       </div>
@@ -206,9 +209,10 @@ function AddPerson({ config, counts, onAdd }: {
   );
 }
 
-function FindPerson({ config, counts, signups, onMove, onCancel, onAttended }: {
+function FindPerson({ config, counts, signups, onMove, onCancel, onAttended, onPublic }: {
   config: AppConfig; counts: Counts; signups: SignupRow[];
   onMove: (id: string, shiftId: string) => void; onCancel: (id: string) => void; onAttended: (id: string, v: boolean) => void;
+  onPublic: (id: string, v: boolean) => void;
 }) {
   const [q, setQ] = useState('');
   const [target, setTarget] = useState<Record<string, string>>({});
@@ -234,6 +238,9 @@ function FindPerson({ config, counts, signups, onMove, onCancel, onAttended }: {
               </span>
               {s.status === 'aktiv' && (
                 <label className="choice"><input type="checkbox" checked={s.attended} onChange={(e) => onAttended(s.id, e.target.checked)} /><span>Møtt</span></label>
+              )}
+              {s.status === 'aktiv' && (
+                <label className="choice"><input type="checkbox" checked={!!s.publicName} onChange={(e) => onPublic(s.id, e.target.checked)} /><span>Vis navn på offentlig vaktliste</span></label>
               )}
               <ShiftSelect config={config} counts={counts} value={target[s.id] ?? ''} onChange={(v) => setTarget({ ...target, [s.id]: v })} />
               {target[s.id] && <CapacityWarning counts={counts} shiftId={target[s.id]} config={config} />}

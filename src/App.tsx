@@ -4,6 +4,7 @@ import VolunteerForm from './pages/VolunteerForm';
 import Confirmation from './pages/Confirmation';
 import CakeForm from './pages/CakeForm';
 import PrizeForm from './pages/PrizeForm';
+import Roster from './pages/Roster';
 
 // Sider med innlogging lastes bare når de åpnes, så forsiden blir lettere
 const Admin = lazy(() => import('./pages/Admin'));
@@ -30,6 +31,8 @@ export default function App() {
     page = <VolunteerForm onDone={(r) => { setResult(r); window.location.hash = '#/bekreftelse'; }} />;
   } else if (path === 'bekreftelse' && result) {
     page = <Confirmation assignments={result} />;
+  } else if (path === 'vakter') {
+    page = <Roster />;
   } else if (path === 'gevinster') {
     page = <PrizeForm />;
   } else if (path === 'kaker') {

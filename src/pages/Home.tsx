@@ -36,6 +36,7 @@ export default function Home() {
           ),
         )}
       </nav>
+      <p><a href="#/vakter">Se hvem som jobber når</a></p>
       {cfg.status === 'ok' && (
         <p className="muted small">
           Spørsmål? {cfg.config.contact.email} eller tlf. {cfg.config.contact.phone}

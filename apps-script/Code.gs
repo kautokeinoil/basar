@@ -20,7 +20,7 @@ var DRAW_HEADER = ['Lodd nr', 'Navn', 'Telefon (siste 3)', 'Gjelder', 'Detaljer'
 var TABS = {
   Vakter: {
     collection: 'signups',
-    header: ['ID', 'Dag', 'Dato', 'Stasjon', 'Start', 'Slutt', 'Navn', 'Telefon', 'E-post', 'Tidsvalg', 'Status', 'Møtt', 'Kilde', 'Registrert'],
+    header: ['ID', 'Dag', 'Dato', 'Stasjon', 'Start', 'Slutt', 'Navn', 'Telefon', 'E-post', 'Tidsvalg', 'Status', 'Møtt', 'Kilde', 'Registrert', 'Offentlig navn'],
     toRow: signupToRow_,
   },
   Kaker: {
@@ -238,6 +238,7 @@ function signupToRow_(d, config) {
     f.attended ? 'JA' : 'NEI',
     f.source || '',
     f.createdAt ? formatTime_(f.createdAt) : '',
+    f.publicName ? 'JA' : 'NEI',
   ];
 }
 

@@ -9,6 +9,23 @@ import { STATUS_BG } from '../lib/statusColors';
 
 const NONE = '__ingen';
 
+type SortKey = 'sponsor' | 'gift' | 'value' | 'status' | 'book' | 'contact';
+const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'sponsor', label: 'Sponsor' }, { key: 'gift', label: 'Gevinst' }, { key: 'value', label: 'Verdi/stk' },
+  { key: 'status', label: 'Status' }, { key: 'book', label: 'Bok' }, { key: 'contact', label: 'Kontakt' },
+];
+// Status sorteres i arbeidsrekkefølge, bøker i tallrekkefølge (Basarbok 2 før Basarbok 10)
+const STATUS_ORDER: Record<string, number> = { registrert: 0, bekreftet: 1, mottatt: 2, avvist: 3 };
+
+function compare(a: Prize, b: Prize, key: SortKey): number {
+  switch (key) {
+    case 'value': return a.value - b.value;
+    case 'status': return (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+    case 'book': return (a.book || '\uffff').localeCompare(b.book || '\uffff', 'nb', { numeric: true });
+    default: return String(a[key] ?? '').localeCompare(String(b[key] ?? ''), 'nb', { numeric: true });
+  }
+}
+
 export default function PrizeDesk() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [prizes, setPrizes] = useState<Prize[] | null>(null);
@@ -21,6 +38,8 @@ export default function PrizeDesk() {
   const [bulkBook, setBulkBook] = useState('');
   const [fix, setFix] = useState({ sponsor: '', gift: '', value: '' });
   const [msg, setMsg] = useState('');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'sponsor', dir: 1 });
+  const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
 
   useEffect(() => onAuthStateChanged(auth, setUser), []);
   async function load() {
@@ -38,8 +57,8 @@ export default function PrizeDesk() {
       .filter((p) => !fStatus || p.status === fStatus)
       .filter((p) => !fBook || (fBook === NONE ? !p.book && p.status !== 'avvist' : p.book === fBook))
       .filter((p) => !t || p.sponsor.toLowerCase().includes(t) || p.gift.toLowerCase().includes(t))
-      .sort((a, b) => a.sponsor.localeCompare(b.sponsor, 'nb') || a.gift.localeCompare(b.gift, 'nb'));
-  }, [prizes, fStatus, fBook, q]);
+      .sort((a, b) => sort.dir * compare(a, b, sort.key) || a.sponsor.localeCompare(b.sponsor, 'nb') || a.gift.localeCompare(b.gift, 'nb'));
+  }, [prizes, fStatus, fBook, q, sort]);
 
   const summary = useMemo(() => {
     const active = (prizes ?? []).filter((p) => p.status !== 'avvist');
@@ -152,7 +171,13 @@ export default function PrizeDesk() {
           <tr>
             <th><input type="checkbox" checked={allShown} aria-label="Velg alle viste"
               onChange={() => setSel((s) => { const n = new Set(s); shown.forEach((p) => (allShown ? n.delete(p.id) : n.add(p.id))); return n; })} /></th>
-            <th>Sponsor</th><th>Gevinst</th><th>Verdi/stk</th><th>Status</th><th>Bok</th><th>Kontakt</th>
+            {COLUMNS.map((c) => (
+              <th key={c.key} aria-sort={sort.key === c.key ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+                <button className="sorter" onClick={() => sortBy(c.key)}>
+                  {c.label}<span aria-hidden="true">{sort.key === c.key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ' ↕'}</span>
+                </button>
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>

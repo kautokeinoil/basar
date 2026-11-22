@@ -89,3 +89,9 @@ fieldset.panel legend { padding: 0 4px; }
 .desk-table tr.selected td:not([style]) { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .books td:nth-child(n+2), .books th:nth-child(n+2) { width: 120px; }
 .chip.full { opacity: .45; cursor: not-allowed; }
+.sorter { background: none; color: inherit; padding: 0; width: auto; font-weight: 600; font-size: inherit; border-radius: 0; }
+.sorter span { color: var(--muted); font-weight: 400; }
+.roster .panel { margin-bottom: 10px; }
+.slots { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.slots li { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; }
+.slots .time { font-variant-numeric: tabular-nums; color: var(--muted); }

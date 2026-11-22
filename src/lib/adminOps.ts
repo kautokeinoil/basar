@@ -17,13 +17,14 @@ export interface SignupRow {
   timePref: TimePref;
   attended: boolean;
   source: string;
+  publicName?: boolean;
 }
 
 const shiftOf = (config: AppConfig, id: string | null) => config.shifts.find((s) => s.id === id) ?? null;
 
 export async function addManual(
   db: Firestore, config: AppConfig,
-  person: { name: string; phone: string; email?: string }, shiftId: string, attendedNow: boolean,
+  person: { name: string; phone: string; email?: string }, shiftId: string, attendedNow: boolean, publicName = false,
 ): Promise<string> {
   const shift = shiftOf(config, shiftId);
   if (!shift) throw new Error('Ukjent skift');
@@ -35,8 +36,9 @@ export async function addManual(
     const ref = doc(collection(db, 'signups'));
     tx.set(ref, {
       name: person.name, phone: person.phone, email: person.email ?? '', day: shift.day, timePref: 'hele',
-      source: 'manuell', attended: attendedNow, createdAt: serverTimestamp(), shiftId, stationKey: stationKey(shift.station), status: 'aktiv',
+      source: 'manuell', publicName, attended: attendedNow, createdAt: serverTimestamp(), shiftId, stationKey: stationKey(shift.station), status: 'aktiv',
     });
+    if (publicName) tx.set(doc(db, 'publicRoster', ref.id), { name: person.name, shiftId });
     tx.update(counterRef, { count: (counter.data()?.count ?? 0) + 1, lastSignup: ref.id });
     tx.set(personRef, { shifts: { ...(p.data()?.shifts ?? {}), [shiftId]: true } });
     return ref.id;
@@ -67,6 +69,7 @@ export async function moveSignup(db: Firestore, config: AppConfig, signupId: str
     if (oldRef && oldC) tx.update(oldRef, { count: Math.max(0, (oldC.data()?.count ?? 1) - 1) });
     tx.update(newRef, { count: (newC.data()?.count ?? 0) + 1, lastSignup: signupId });
     tx.update(sRef, { shiftId: newShiftId, stationKey: stationKey(target.station), day: target.day, status: 'aktiv' });
+    if (s.publicName) tx.set(doc(db, 'publicRoster', signupId), { name: s.name, shiftId: newShiftId });
     tx.set(pRef, { shifts });
   });
 }
@@ -89,6 +92,7 @@ export async function cancelSignup(db: Firestore, signupId: string): Promise<str
       tx.set(pRef, { shifts });
     }
     tx.update(sRef, { status: 'avmeldt', attended: false });
+    tx.delete(doc(db, 'publicRoster', signupId));
     return freed;
   });
 }
@@ -102,4 +106,17 @@ export async function setAttended(db: Firestore, signupId: string, attended: boo
 /** Ventelistede som passer et ledig skift (samme dag, tidsvalg passer), eldste først. */
 export function waitlistFor(shift: Shift, signups: SignupRow[]): SignupRow[] {
   return signups.filter((s) => s.status === 'venteliste' && s.day === shift.day && matchesPref(shift, s.timePref));
+}
+
+/** Admin: slår av/på visning på den offentlige vaktlisten (f.eks. når noen ombestemmer seg). */
+export async function setPublicName(db: Firestore, signupId: string, value: boolean): Promise<void> {
+  await runTransaction(db, async (tx) => {
+    const sRef = doc(db, 'signups', signupId);
+    const s = (await tx.get(sRef)).data() as SignupRow | undefined;
+    if (!s) throw new Error('Fant ikke påmeldingen');
+    tx.update(sRef, { publicName: value });
+    const rRef = doc(db, 'publicRoster', signupId);
+    if (value && s.status === 'aktiv' && s.shiftId) tx.set(rRef, { name: s.name, shiftId: s.shiftId });
+    else tx.delete(rRef);
+  });
 }

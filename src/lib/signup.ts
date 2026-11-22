@@ -3,7 +3,8 @@ import { pickShift } from './assign';
 import { stationKey } from './station';
 import type { AppConfig, Assignment, DayId, TimePref } from './types';
 
-export interface Person { name: string; phone: string; email?: string }
+/** publicName = samtykke til at navnet vises på den offentlige vaktlisten */
+export interface Person { name: string; phone: string; email?: string; publicName?: boolean }
 
 /**
  * Tildeler én vakt for én dag i én transaksjon:
@@ -50,6 +51,7 @@ export async function signUpForDay(
       day,
       timePref: pref,
       source: 'app',
+      publicName: !!person.publicName,
       attended: false,
       createdAt: serverTimestamp(),
     };
@@ -60,6 +62,8 @@ export async function signUpForDay(
     }
 
     tx.set(signupRef, { ...base, shiftId: chosen.id, stationKey: stationKey(chosen.station), status: 'aktiv' });
+    // Offentlig vaktliste: bare navn og skift, og bare med samtykke
+    if (person.publicName) tx.set(doc(db, 'publicRoster', signupRef.id), { name: person.name, shiftId: chosen.id });
     tx.update(doc(db, 'shiftCounts', chosen.id), { count: counts[chosen.id] + 1, lastSignup: signupRef.id });
     tx.set(personRef, { shifts: { ...owned, [chosen.id]: true } });
     return { day, shift: chosen };
