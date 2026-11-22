@@ -33,6 +33,7 @@ export async function addManual(
     const personRef = doc(db, 'people', person.phone);
     const counter = await tx.get(counterRef);
     const p = await tx.get(personRef);
+    if (p.data()?.shifts?.[shiftId]) throw new Error(`${person.name} har allerede denne vakten.`);
     const ref = doc(collection(db, 'signups'));
     tx.set(ref, {
       name: person.name, phone: person.phone, email: person.email ?? '', day: shift.day, timePref: 'hele',

@@ -520,3 +520,10 @@ describe('allerede opptatt', () => {
     expect(r.status).toBe('venteliste');
   });
 });
+
+describe('admin: ingen dobbel vakt', () => {
+  it('samme person kan ikke legges inn to ganger på samme vakt', async () => {
+    await addManual(admin(), SEED_CONFIG, { name: 'Dobbel', phone: '+4740000900' }, 'opprigg-1800', false);
+    await expect(addManual(admin(), SEED_CONFIG, { name: 'Dobbel', phone: '+4740000900' }, 'opprigg-1800', false)).rejects.toThrow(/allerede/);
+  });
+});
