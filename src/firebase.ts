@@ -15,7 +15,7 @@ export const app = initializeApp({
 // App Check (spam-vern): beviser at forespørsler kommer fra denne nettsiden, ikke et skript.
 // Nøkkelen er en offentlig reCAPTCHA Enterprise-nettstedsnøkkel (ikke hemmelig).
 // Tom nøkkel = App Check er av. Kjøres ikke lokalt (localhost), der nøkkelen ikke gjelder.
-const RECAPTCHA_SITE_KEY = '';
+const RECAPTCHA_SITE_KEY = '6LeHXi0uAAAAAK-4M0SsV4mlWbZXwoOzh2ZEPcNS';
 if (RECAPTCHA_SITE_KEY && location.hostname !== 'localhost') {
   initializeAppCheck(app, {
     provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY),
