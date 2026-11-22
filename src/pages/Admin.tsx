@@ -10,6 +10,7 @@ import { addManual, cancelSignup, moveSignup, setAttended, setPublicName, waitli
 import { newToken, stationKey, stationsOf } from '../lib/station';
 import { type Prize } from '../lib/prizes';
 import { cakeLimitsOf, cakeTypesOf, deleteCake } from '../lib/cakes';
+import { resetTestData } from '../lib/reset';
 import type { AppConfig, Shift } from '../lib/types';
 
 type Counts = Record<string, { count: number; max: number }>;
@@ -133,6 +134,7 @@ export default function Admin() {
             <summary>Vedlikehold</summary>
             <p className="muted">Oppretter bare det som mangler (tellere, stasjonsfelt). Nullstiller aldri påmeldinger.</p>
             <button onClick={() => run('Ferdig.', seed)}>Opprett manglende tellere og felt</button>
+            <ResetPanel launched={!!(config as AppConfig & { launched?: boolean }).launched} onDone={(m) => run(m, async () => {})} />
           </details>
         </>
       )}
@@ -418,5 +420,50 @@ function Cakes({ config }: { config: AppConfig }) {
         ))}
       </ul>
     </details>
+  );
+}
+
+function ResetPanel({ launched, onDone }: { launched: boolean; onDone: (msg: string) => void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function reset() {
+    setBusy(true); setErr('');
+    try {
+      const r = await resetTestData(db);
+      setText('');
+      onDone(`Nullstilt: ${r.signups} påmeldinger, ${r.cakes} kaker, ${r.prizes} gevinster slettet. ${r.shiftCounts} tellere satt til 0. ` +
+        'Husk å slette radene (fra rad 2) i fanene Vakter, Kaker og Gevinster i arket.');
+    } catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  async function setLaunched(v: boolean) {
+    await updateDoc(doc(db, 'config', 'main'), { launched: v });
+    onDone(v ? 'Markert som lansert. Nullstilling er nå sperret.' : 'Lansert-merket er fjernet.');
+  }
+
+  return (
+    <div className="danger">
+      <h3>Før lansering: slett testdata</h3>
+      {launched ? (
+        <>
+          <p className="small">Basaren er markert som lansert, og nullstilling er sperret, slik at ekte påmeldinger ikke kan slettes ved et uhell.</p>
+          <button className="link" onClick={() => setLaunched(false)}>Fjern lansert-merket</button>
+        </>
+      ) : (
+        <>
+          <p className="small">
+            Sletter alle påmeldinger, kaker, gevinster og sponsorsøk, og setter alle tellere til 0.
+            Oppsettet og stasjonslenkene beholdes. <strong>Kan ikke angres.</strong>
+          </p>
+          <label>Skriv NULLSTILL for å bekrefte<input value={text} onChange={(e) => setText(e.target.value)} autoComplete="off" /></label>
+          {err && <p className="error">{err}</p>}
+          <button className="danger-btn" disabled={text !== 'NULLSTILL' || busy} onClick={reset}>{busy ? 'Sletter …' : 'Slett all testdata'}</button>
+          <p className="small">Når lenken er delt: <button className="link" onClick={() => setLaunched(true)}>Marker som lansert</button> (sperrer nullstilling).</p>
+        </>
+      )}
+    </div>
   );
 }

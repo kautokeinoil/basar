@@ -8,6 +8,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, 
 import { SEED_CONFIG } from '../src/config/seed';
 import { signUpForDay } from '../src/lib/signup';
 import { addManual, cancelSignup, moveSignup, setPublicName } from '../src/lib/adminOps';
+import { resetTestData } from '../src/lib/reset';
 import { registerCakes, emptyLine, cakeAvailability, deleteCake } from '../src/lib/cakes';
 import { registerPrizes, sponsorExists } from '../src/lib/prizes';
 
@@ -465,5 +466,39 @@ describe('offentlig vaktliste', () => {
     expect(await roster()).toHaveLength(1);
     await cancelSignup(admin(), id);
     expect(await roster()).toHaveLength(0);
+  });
+});
+
+describe('reservekonto og nullstilling', () => {
+  const reserve = () => env.authenticatedContext('res', { email: 'basar@kautokeinoil.no', email_verified: true }).firestore() as unknown as Firestore;
+
+  it('reservekontoen er admin', async () => {
+    await signUpForDay(anon(), SEED_CONFIG, person(1), 'd1', 'hele');
+    await assertSucceeds(getDocs(collection(reserve(), 'signups')));
+  });
+
+  it('nullstilling sletter testdata, nullstiller tellere og beholder oppsett og lenker', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'access', 'tok-x'), { kind: 'stasjon', stationKey: 'kafe', station: 'Kafé' });
+    });
+    await signUpForDay(anon(), SEED_CONFIG, { ...person(1), publicName: true }, 'd1', 'hele');
+    await registerCakes(anon(), SEED_CONFIG, { name: 'Kari', phone: '+4740000700' }, [{ ...emptyLine(), type: 'muffins', deliveryDay: 'd1' }]);
+    await registerPrizes(anon(), { name: 'Rema 1000', contact: 'Per', phone: '+4741234567' }, [{ gift: 'Gavekort', qty: 2, value: 500 }]);
+
+    const r = await resetTestData(admin());
+    expect(r.signups).toBe(1);
+    for (const c of ['signups', 'people', 'publicRoster', 'cakes', 'cakeSlots', 'prizes', 'sponsorIndex']) {
+      expect((await getDocs(collection(admin(), c))).size).toBe(0);
+    }
+    const counts = await getDocs(collection(admin(), 'shiftCounts'));
+    expect(counts.docs.every((d) => d.data().count === 0 && d.data().max > 0)).toBe(true);
+    expect((await getDoc(doc(admin(), 'config', 'main'))).exists()).toBe(true);
+    expect((await getDoc(doc(admin(), 'access', 'tok-x'))).exists()).toBe(true);
+  });
+
+  it('nullstilling er sperret etter lansering, og anonym kan ikke nullstille', async () => {
+    await expect(resetTestData(anon())).rejects.toThrow();
+    await updateDoc(doc(admin(), 'config', 'main'), { launched: true });
+    await expect(resetTestData(admin())).rejects.toThrow(/lansert/);
   });
 });

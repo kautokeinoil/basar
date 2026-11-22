@@ -95,3 +95,6 @@ fieldset.panel legend { padding: 0 4px; }
 .slots { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
 .slots li { display: grid; grid-template-columns: 6.5em 1fr; gap: 8px; }
 .slots .time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.danger { margin-top: 16px; padding: 12px; border: 1px solid var(--err); border-radius: 10px; display: grid; gap: 8px; }
+.danger h3 { margin: 0; font-size: 16px; color: var(--err); }
+.danger-btn { background: var(--err); color: #fff; }
