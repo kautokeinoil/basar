@@ -43,6 +43,12 @@ export async function signUpForDay(
     const shift = pickShift({ dayShifts: open, counts, pref, existing, rng });
     const chosen = shift ? config.shifts.find((s) => s.id === shift.id)! : null;
 
+    // Ingen ledig vakt, men det FINNES ledige vakter som bare kolliderer med personens egne:
+    // da er personen opptatt, ikke på venteliste. Ingenting lagres.
+    if (!chosen && pickShift({ dayShifts: open, counts, pref, existing: [], rng })) {
+      return { day, shift: null, status: 'opptatt' };
+    }
+
     const signupRef = doc(collection(db, 'signups'));
     const base = {
       name: person.name,
@@ -58,7 +64,7 @@ export async function signUpForDay(
 
     if (!chosen) {
       tx.set(signupRef, { ...base, shiftId: null, stationKey: '', status: 'venteliste' });
-      return { day, shift: null };
+      return { day, shift: null, status: 'venteliste' };
     }
 
     tx.set(signupRef, { ...base, shiftId: chosen.id, stationKey: stationKey(chosen.station), status: 'aktiv' });
@@ -66,6 +72,6 @@ export async function signUpForDay(
     if (person.publicName) tx.set(doc(db, 'publicRoster', signupRef.id), { name: person.name, shiftId: chosen.id });
     tx.update(doc(db, 'shiftCounts', chosen.id), { count: counts[chosen.id] + 1, lastSignup: signupRef.id });
     tx.set(personRef, { shifts: { ...owned, [chosen.id]: true } });
-    return { day, shift: chosen };
+    return { day, shift: chosen, status: 'tildelt' };
   });
 }

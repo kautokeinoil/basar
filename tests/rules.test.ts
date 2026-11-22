@@ -502,3 +502,21 @@ describe('reservekonto og nullstilling', () => {
     await expect(resetTestData(admin())).rejects.toThrow(/lansert/);
   });
 });
+
+describe('allerede opptatt', () => {
+  it('samme nummer på Opprigg igjen gir «opptatt», ikke venteliste, og lagrer ingenting', async () => {
+    const a = await signUpForDay(anon(), SEED_CONFIG, person(1), 'opprigg', 'hele');
+    expect(a.status).toBe('tildelt');
+    const b = await signUpForDay(anon(), SEED_CONFIG, person(1), 'opprigg', 'hele');
+    expect(b.status).toBe('opptatt');
+    expect((await getDocs(collection(admin(), 'signups'))).size).toBe(1);
+  });
+
+  it('ekte fullt gir fortsatt venteliste', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCounts', 'opprigg-1800'), { count: 100, max: 100, lastSignup: 'x' });
+    });
+    const r = await signUpForDay(anon(), SEED_CONFIG, person(2), 'opprigg', 'hele');
+    expect(r.status).toBe('venteliste');
+  });
+});

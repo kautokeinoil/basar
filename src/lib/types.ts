@@ -32,5 +32,7 @@ export interface AppConfig {
 
 export interface Assignment {
   day: DayId;
-  shift: Shift | null; // null = venteliste
+  shift: Shift | null; // null = venteliste eller allerede opptatt
+  /** «opptatt» = personen har allerede vakt i hele tidsrommet; da lagres ingenting. */
+  status?: 'tildelt' | 'venteliste' | 'opptatt';
 }

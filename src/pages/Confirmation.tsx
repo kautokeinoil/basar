@@ -9,7 +9,8 @@ export default function Confirmation({ assignments }: { assignments: Assignment[
   const config = cfg.config;
   const dayOf = (id: string) => config.days.find((d) => d.id === id)!;
   const shifts = assignments.flatMap((a) => (a.shift ? [a.shift] : []));
-  const waiting = assignments.filter((a) => !a.shift);
+  const waiting = assignments.filter((a) => !a.shift && a.status !== 'opptatt');
+  const busy = assignments.filter((a) => a.status === 'opptatt');
 
   function download() {
     const blob = new Blob([buildIcs(config, shifts)], { type: 'text/calendar;charset=utf-8' });
@@ -22,7 +23,7 @@ export default function Confirmation({ assignments }: { assignments: Assignment[
 
   return (
     <section>
-      <h1>{shifts.length > 0 ? 'Takk! Her er vakten din' : 'Takk for påmeldingen'}</h1>
+      <h1>{shifts.length > 0 ? 'Takk! Her er vakten din' : waiting.length > 0 ? 'Takk for påmeldingen' : 'Ingen ny vakt'}</h1>
 
       {shifts.length > 0 && (
         <ul className="cards">
@@ -37,6 +38,13 @@ export default function Confirmation({ assignments }: { assignments: Assignment[
           ))}
         </ul>
       )}
+
+      {busy.map((b) => (
+        <p key={`busy-${b.day}`} className="notice">
+          Du har allerede vakt på {dayOf(b.day).name}{b.day === 'opprigg' ? '' : ' i tidsrommet du valgte'}, så du fikk ingen ny vakt der.
+          {b.day !== 'opprigg' && ' Vil du ha en vakt til, kan du melde deg på igjen med et annet tidspunkt.'}
+        </p>
+      ))}
 
       {waiting.map((w) => (
         <p key={w.day} className="notice">
