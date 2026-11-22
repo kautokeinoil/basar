@@ -239,7 +239,7 @@ service cloud.firestore {
     // Et innslag kan bare lages sammen med en ny gevinst for samme sponsor.
     match /sponsorIndex/{key} {
       allow get: if true;
-      allow list: if request.query.limit <= 1;
+      allow list: if isAdmin() || request.query.limit <= 1;
       allow create, update: if isAdmin() || (
         request.resource.data.keys().hasOnly(['prize'])
         && request.resource.data.prize is string
@@ -257,7 +257,7 @@ service cloud.firestore {
 
     // Kobler en anonym innlogging til en lenke. Bare gyldige lenker godtas.
     match /sessions/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['token'])
         && request.resource.data.token is string
