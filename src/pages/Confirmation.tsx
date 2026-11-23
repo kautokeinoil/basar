@@ -1,11 +1,12 @@
 import { useConfig, formatDate } from '../lib/useConfig';
 import { buildIcs } from '../lib/ics';
 import type { Assignment } from '../lib/types';
+import { Loading } from '../lib/Loading';
 
 
 export default function Confirmation({ assignments }: { assignments: Assignment[] }) {
   const cfg = useConfig();
-  if (cfg.status !== 'ok') return <p className="muted">Laster …</p>;
+  if (cfg.status !== 'ok') return <Loading />;
   const config = cfg.config;
   const dayOf = (id: string) => config.days.find((d) => d.id === id)!;
   const shifts = assignments.flatMap((a) => (a.shift ? [a.shift] : []));

@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { lazyWithReload, LoadErrorBoundary, Loading } from './lib/Loading';
 import Home from './pages/Home';
 import VolunteerForm from './pages/VolunteerForm';
 import Confirmation from './pages/Confirmation';
@@ -7,10 +8,10 @@ import PrizeForm from './pages/PrizeForm';
 import Roster from './pages/Roster';
 
 // Sider med innlogging lastes bare når de åpnes, så forsiden blir lettere
-const Admin = lazy(() => import('./pages/Admin'));
-const Station = lazy(() => import('./pages/Station'));
-const CakeDesk = lazy(() => import('./pages/CakeDesk'));
-const PrizeDesk = lazy(() => import('./pages/PrizeDesk'));
+const Admin = lazyWithReload(() => import('./pages/Admin'));
+const Station = lazyWithReload(() => import('./pages/Station'));
+const CakeDesk = lazyWithReload(() => import('./pages/CakeDesk'));
+const PrizeDesk = lazyWithReload(() => import('./pages/PrizeDesk'));
 import type { Assignment } from './lib/types';
 
 // Hash-ruting fungerer på GitHub Pages uten serveroppsett.
@@ -55,7 +56,7 @@ export default function App() {
         <a href="#/" className="brand">Kautokeino IL · Romjulsbasar</a>
         <a href="#/" aria-label="Til forsiden"><img src={`${import.meta.env.BASE_URL}kil-logo.png`} alt="Kautokeino IL" className="logo" width="40" height="40" /></a>
       </header>
-      <main><Suspense fallback={<p className="muted">Laster …</p>}>{page}</Suspense></main>
+      <main><LoadErrorBoundary><Suspense fallback={<Loading />}>{page}</Suspense></LoadErrorBoundary></main>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { auth } from '../auth';
 import { displayPhone } from '../lib/phone';
 import { useConfig, formatDate } from '../lib/useConfig';
 import { cakeTypesOf } from '../lib/cakes';
+import { Loading } from '../lib/Loading';
 
 interface Cake {
   id: string; name: string; phone: string; type: string; variant: string;
@@ -49,7 +50,7 @@ export default function CakeDesk({ token }: { token: string }) {
     finally { setBusy(null); }
   }
 
-  if (state === 'loading' || !config) return <p className="muted">Laster …</p>;
+  if (state === 'loading' || !config) return <Loading />;
   if (state === 'invalid') return <p className="notice">Lenken er ugyldig eller sperret. Kontakt basaransvarlig for ny lenke.</p>;
   if (state === 'error') return <p className="error">Noe gikk galt. Last inn siden på nytt.</p>;
 

@@ -5,6 +5,7 @@ import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
 import { baseFull, cakeAvailability, cakeLimitsOf, extraLeft, glutenShare, cakeTypesOf, emptyLine, FullError, registerCakes, slotKey, type Availability, type CakeLine } from '../lib/cakes';
 import type { CakeTypeId } from '../lib/types';
+import { Loading } from '../lib/Loading';
 
 export default function CakeForm() {
   const cfg = useConfig();
@@ -19,7 +20,7 @@ export default function CakeForm() {
   const reload = () => cakeAvailability(db).then(setAvail).catch(() => setAvail(null));
   useEffect(() => { reload(); }, []);
 
-  if (cfg.status === 'loading') return <p className="muted">Laster …</p>;
+  if (cfg.status === 'loading') return <Loading />;
   if (cfg.status !== 'ok') return <p className="notice">Registreringen er ikke åpnet ennå.</p>;
   const config = cfg.config;
   const types = cakeTypesOf(config);

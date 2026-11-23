@@ -12,6 +12,7 @@ import { type Prize } from '../lib/prizes';
 import { cakeLimitsOf, cakeTypesOf, deleteCake } from '../lib/cakes';
 import { resetTestData } from '../lib/reset';
 import type { AppConfig, Shift } from '../lib/types';
+import { Loading } from '../lib/Loading';
 
 type Counts = Record<string, { count: number; max: number }>;
 
@@ -80,7 +81,7 @@ export default function Admin() {
     return created;
   }
 
-  if (user === undefined) return <p className="muted">Laster …</p>;
+  if (user === undefined) return <Loading />;
   if (!user)
     return (
       <section>
@@ -328,7 +329,7 @@ function Links({ config }: { config: AppConfig }) {
     <details className="panel">
       <summary>Lenker for stasjoner og kakemottak</summary>
       <p className="muted small">Send lenken til den som har ansvaret. Stasjonslenken viser navn og telefon for stasjonen og lar dem krysse av oppmøte. Kakemottaket krysser av levert. «Sperr og lag ny» gjør den gamle lenken ubrukelig med en gang.</p>
-      {links === null ? <p className="muted">Laster …</p> : targets.map((st) => {
+      {links === null ? <Loading /> : targets.map((st) => {
         const l = links.find((x) => x.kind === st.kind && x.stationKey === st.key);
         const url = l ? `${base}${st.kind}/${l.token}` : '';
         return (

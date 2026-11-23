@@ -4,6 +4,7 @@ import { useConfig } from '../lib/useConfig';
 import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
 import { emptyPrize, MAX_PER_LINE, parseWhole, registerPrizes, sponsorExists, sponsorKey, type PrizeLine } from '../lib/prizes';
+import { Loading } from '../lib/Loading';
 
 function SponsorSearch() {
   const [q, setQ] = useState('');
@@ -71,7 +72,7 @@ export default function PrizeForm() {
     } finally { setBusy(false); }
   }
 
-  if (cfg.status === 'loading') return <p className="muted">Laster …</p>;
+  if (cfg.status === 'loading') return <Loading />;
   const contactLine = cfg.status === 'ok' ? `${cfg.config.contact.email} eller tlf. ${cfg.config.contact.phone}` : '';
 
   if (done)

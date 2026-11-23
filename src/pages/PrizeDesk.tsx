@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import { auth } from '../auth';
 import { BOOKS, parseWhole, PRIZE_STATUSES, sponsorKey, type Prize, type PrizeStatus } from '../lib/prizes';
 import { STATUS_BG } from '../lib/statusColors';
+import { Loading } from '../lib/Loading';
 
 const NONE = '__ingen';
 
@@ -102,10 +103,10 @@ export default function PrizeDesk() {
     setFix({ sponsor: '', gift: '', value: '' });
   }
 
-  if (user === undefined) return <p className="muted">Laster …</p>;
+  if (user === undefined) return <Loading />;
   if (!user) return <section><h1>Gevinster</h1><button onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}>Logg inn med Google</button></section>;
   if (denied) return <p className="error">Denne kontoen har ikke admin-tilgang.</p>;
-  if (!prizes) return <p className="muted">Laster …</p>;
+  if (!prizes) return <Loading />;
 
   const allShown = shown.length > 0 && shown.every((p) => sel.has(p.id));
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });

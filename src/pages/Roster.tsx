@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useConfig, formatDate } from '../lib/useConfig';
+import { Loading } from '../lib/Loading';
 
 export default function Roster() {
   const cfg = useConfig();
@@ -38,7 +39,7 @@ export default function Roster() {
   }, [config, names, counts]);
 
   if (error) return <p className="error">Kunne ikke laste vaktlisten. Last inn siden på nytt.</p>;
-  if (!config || !names) return <p className="muted">Laster …</p>;
+  if (!config || !names) return <Loading />;
 
   return (
     <section className="roster">

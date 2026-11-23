@@ -5,6 +5,7 @@ import { db } from '../firebase';
 import { auth } from '../auth';
 import { displayPhone } from '../lib/phone';
 import { useConfig, formatDate } from '../lib/useConfig';
+import { Loading } from '../lib/Loading';
 
 interface Row { id: string; name: string; phone: string; day: string; shiftId: string; attended: boolean }
 
@@ -58,7 +59,7 @@ export default function Station({ token }: { token: string }) {
     }
   }
 
-  if (state === 'loading' || !config) return <p className="muted">Laster …</p>;
+  if (state === 'loading' || !config) return <Loading />;
   if (state === 'invalid') return <p className="notice">Lenken er ugyldig eller sperret. Kontakt basaransvarlig for ny lenke.</p>;
   if (state === 'error') return <p className="error">Noe gikk galt. Last inn siden på nytt.</p>;
 

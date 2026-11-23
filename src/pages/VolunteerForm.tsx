@@ -5,6 +5,7 @@ import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
 import { signUpForDay } from '../lib/signup';
 import type { Assignment, DayId, TimePref } from '../lib/types';
+import { Loading } from '../lib/Loading';
 
 const PREFS: { value: TimePref; label: string; hint: string }[] = [
   { value: 'hele', label: 'Når som helst', hint: 'Gir størst sjanse for vakt' },
@@ -23,7 +24,7 @@ export default function VolunteerForm({ onDone }: { onDone: (r: Assignment[]) =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  if (cfg.status === 'loading') return <p className="muted">Laster …</p>;
+  if (cfg.status === 'loading') return <Loading />;
   if (cfg.status !== 'ok') return <p className="notice">Påmeldingen er ikke åpnet ennå. Prøv igjen senere.</p>;
   const config = cfg.config;
 
