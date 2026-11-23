@@ -102,7 +102,7 @@ describe('kapasitet håndheves i reglene', () => {
   });
 
   it('samtidige påmeldinger går aldri over grensen', async () => {
-    const n = 90; // dag 1 har 77 plasser totalt
+    const n = 150; // sjekklisten: 150 samtidige mot dag 1 (77 plasser totalt)
     const results = await Promise.allSettled(
       Array.from({ length: n }, (_, i) => signUpForDay(anon(), SEED_CONFIG, person(i), 'd1', 'hele')),
     );
