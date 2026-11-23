@@ -108,3 +108,7 @@ fieldset.panel legend { padding: 0 4px; }
 .cakeopt.full { opacity: .45; cursor: not-allowed; }
 .cakename small { color: var(--muted); }
 .cakeleft { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cakegroup { display: grid; gap: 6px; }
+.cakegroup + .cakegroup { margin-top: 14px; }
+.cakegroup h3 { margin: 4px 0 2px; font-size: 15px; }
+.cakegroup.waffle .cakeopt { border-style: dashed; }

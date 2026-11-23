@@ -124,22 +124,35 @@ export default function CakeForm() {
           {!l.deliveryDay ? (
             <p className="muted small">Velg dag først, så ser du hva kafeen trenger.</p>
           ) : (
-            <div className="cakelist" role="radiogroup" aria-label="Hva baker du?">
-              {types.map((t) => {
-                const n = left(t.id, l.deliveryDay, i);
-                const full = n <= 0;
-                const extra = !full && isExtra(l.deliveryDay) && !t.noExtra && (avail?.used[slotKey(t.id, l.deliveryDay)] ?? 0) >= (limits[t.id] ?? 0);
-                return (
-                  <label key={t.id} className={`cakeopt ${l.type === t.id ? 'on' : ''} ${full ? 'full' : ''}`}>
-                    <input type="radio" name={`type-${i}`} checked={l.type === t.id} disabled={full && l.type !== t.id}
-                      onChange={() => update(i, { type: t.id })} />
-                    <span className="cakename">{t.name}{t.unit && <small> ({t.unit})</small>}</span>
-                    <span className="cakeleft">
-                      {full ? 'Nok' : extra ? (Number.isFinite(n) ? `Ekstra: ${n}` : 'Ekstra') : Number.isFinite(n) ? `${n} igjen` : ''}
-                    </span>
-                  </label>
-                );
-              })}
+            <div role="radiogroup" aria-label="Hva baker du?">
+              {[
+                { title: 'Kaker', list: types.filter((t) => !t.noExtra) },
+                { title: 'Vaffelrøre', list: types.filter((t) => t.noExtra) },
+              ].filter((g) => g.list.length).map((g) => (
+                <div key={g.title} className={`cakegroup ${g.title === 'Vaffelrøre' ? 'waffle' : ''}`}>
+                  <h3>{g.title}</h3>
+                  <div className="cakelist">
+                    {g.list.map((t) => {
+                      const n = left(t.id, l.deliveryDay, i);
+                      const full = n <= 0;
+                      const extra = !full && isExtra(l.deliveryDay) && !t.noExtra && (avail?.used[slotKey(t.id, l.deliveryDay)] ?? 0) >= (limits[t.id] ?? 0);
+                      const liters = /liter/.test(t.unit) ? parseInt(t.unit, 10) : 0; // vis vaffelrøre i liter
+                      return (
+                        <label key={t.id} className={`cakeopt ${l.type === t.id ? 'on' : ''} ${full ? 'full' : ''}`}>
+                          <input type="radio" name={`type-${i}`} checked={l.type === t.id} disabled={full && l.type !== t.id}
+                            onChange={() => update(i, { type: t.id })} />
+                          <span className="cakename">{t.name}{t.unit && <small> ({t.unit})</small>}</span>
+                          <span className="cakeleft">
+                            {full ? 'Nok' : extra ? (Number.isFinite(n) ? `Ekstra: ${n}` : 'Ekstra')
+                              : liters && Number.isFinite(n) ? `${n * liters} liter igjen`
+                              : Number.isFinite(n) ? `${n} igjen` : ''}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
           {types.find((t) => t.id === l.type)?.needsText ? (
