@@ -59,6 +59,7 @@ export default function Confirmation({ assignments }: { assignments: Assignment[
         Kan du ikke likevel, eller vil du bytte? Kontakt {config.contact.email} eller tlf. {config.contact.phone}.
       </p>
       <p><a href="#/frivillig">Meld deg på flere vakter</a></p>
+      <p><a href="#/">Tilbake til forsiden</a></p>
     </section>
   );
 }

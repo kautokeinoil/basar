@@ -53,6 +53,7 @@ export default function App() {
     <div className="shell">
       <header className="top">
         <a href="#/" className="brand">Kautokeino IL · Romjulsbasar</a>
+        <a href="#/" aria-label="Til forsiden"><img src={`${import.meta.env.BASE_URL}kil-logo.png`} alt="Kautokeino IL" className="logo" width="40" height="40" /></a>
       </header>
       <main><Suspense fallback={<p className="muted">Laster …</p>}>{page}</Suspense></main>
     </div>

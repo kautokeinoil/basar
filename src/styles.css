@@ -98,3 +98,5 @@ fieldset.panel legend { padding: 0 4px; }
 .danger { margin-top: 16px; padding: 12px; border: 1px solid var(--err); border-radius: 10px; display: grid; gap: 8px; }
 .danger h3 { margin: 0; font-size: 16px; color: var(--err); }
 .danger-btn { background: var(--err); color: #fff; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.logo { display: block; width: 40px; height: 40px; }
