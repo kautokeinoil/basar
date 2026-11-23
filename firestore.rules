@@ -34,18 +34,17 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/config/main).data.get('cakeLimits', {});
     }
 
-    // Ekstra kaker per dag når kvoten er full (0 = ingen grense)
+    // Kakeoppsett (config/main). Kaketypene står bare i oppsettet, ikke her.
+    function cakeCfg() {
+      return get(/databases/$(database)/documents/config/main).data;
+    }
+    // Ekstra kaker per dag når alle kakeplassene er tatt (0 = ingen grense)
     function cakeExtraCap() {
-      return get(/databases/$(database)/documents/config/main).data.get('cakeExtraPerDay', 0);
+      return cakeCfg().get('cakeExtraPerDay', 0);
     }
-    // Kvoten for en dag er full når siste plass for hver kvotetype finnes (etter denne skrivingen).
-    // Kvotetypene må stå her og i cakeLimits i oppsettet.
-    function lastSlotTaken(type, day) {
-      return existsAfter(/databases/$(database)/documents/cakeSlots/$(type + '_' + day + '_' + string(cakeLimits()[type])));
-    }
+    // Dagen er full når den siste dagsplassen (base_{dag}_{total}) finnes etter denne skrivingen
     function cakeDayFull(day) {
-      return lastSlotTaken('flotekake', day) && lastSlotTaken('formkake', day)
-        && lastSlotTaken('formkakesjoko', day) && lastSlotTaken('muffins', day);
+      return existsAfter(/databases/$(database)/documents/cakeSlots/$('base_' + day + '_' + string(cakeCfg().get('cakeBaseTotal', 0))));
     }
 
     function counterPath(shiftId) {
@@ -136,14 +135,18 @@ service cloud.firestore {
     // Kaker: offentlig kan registrere (validert). Kakemottak-lenken leser og krysser av «levert».
     // Kaketypene må stemme med config (cakeTypes); legges en type til, må den også inn her.
     match /cakes/{cakeId} {
+      function slotPath(id) {
+        return /databases/$(database)/documents/cakeSlots/$(id);
+      }
       function validCake(d) {
-        return d.keys().hasOnly(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'slot', 'delivered', 'source', 'createdAt'])
-          && d.keys().hasAll(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'slot', 'delivered', 'source', 'createdAt'])
+        return d.keys().hasOnly(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'slot', 'daySlot', 'delivered', 'source', 'createdAt'])
+          && d.keys().hasAll(['regId', 'name', 'phone', 'type', 'variant', 'glutenFree', 'lactoseFree', 'allergens', 'deliveryDay', 'slot', 'daySlot', 'delivered', 'source', 'createdAt'])
           && d.regId is string && d.regId.size() <= 40
           && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
           && d.phone is string && d.phone.matches('^[+][1-9][0-9]{7,14}$')
-          && d.type in ['flotekake', 'formkake', 'formkakesjoko', 'muffins', 'vaffel']
+          && d.type in cakeLimits()
           && d.variant is string && d.variant.size() <= 80
+          && (!(d.type in cakeCfg().get('cakeNeedsText', [])) || d.variant.size() >= 2)
           && d.glutenFree is bool && d.lactoseFree is bool
           && d.allergens is string && d.allergens.size() <= 200
           && d.deliveryDay in ['d1', 'd2']
@@ -152,15 +155,24 @@ service cloud.firestore {
           && d.createdAt == request.time
           && validSlot(d);
       }
-      // Kaketyper med kvote må ha en plass (cakeSlots) som peker tilbake på dette bakverket
+      // Hvert bakverk har en plass i sin types kvote (og en dagsplass), eller en ekstraplass.
+      // Plassene må peke tilbake på dette bakverket.
       function validSlot(d) {
-        return d.slot is string && (
-          (!(d.type in cakeLimits()) && d.slot == '')
-          || (d.type in cakeLimits()
-              && (d.slot.matches('^' + d.type + '_' + d.deliveryDay + '_[0-9]+$')
-                  || d.slot.matches('^ekstra_' + d.deliveryDay + '_[0-9]+$'))
-              && getAfter(/databases/$(database)/documents/cakeSlots/$(d.slot)).data.cake == cakeId)
-        );
+        return d.slot is string && d.daySlot is string
+          && getAfter(slotPath(d.slot)).data.cake == cakeId
+          && (
+            // vaffelrøre o.l.: bare typeplass, ingen dagsplass, ingen ekstra
+            (d.type in cakeCfg().get('cakeNoExtra', [])
+              && d.slot.matches('^' + d.type + '_' + d.deliveryDay + '_[0-9]+$') && d.daySlot == '')
+            || (!(d.type in cakeCfg().get('cakeNoExtra', [])) && (
+              // vanlig kake: typeplass + dagsplass
+              (d.slot.matches('^' + d.type + '_' + d.deliveryDay + '_[0-9]+$')
+                && d.daySlot.matches('^base_' + d.deliveryDay + '_[0-9]+$')
+                && getAfter(slotPath(d.daySlot)).data.cake == cakeId)
+              // ekstra når dagen er full
+              || (d.slot.matches('^ekstra_' + d.deliveryDay + '_[0-9]+$') && d.daySlot == '')
+            ))
+          );
       }
       function cakeLink() {
         return hasSession() && link().kind == 'kake';
@@ -193,21 +205,30 @@ service cloud.firestore {
     // Kakeplasser: {type}_{dag}_{nr}. Kan bare opprettes én gang og bare innenfor kvoten.
     // Inneholder ingen personopplysninger (bare ID-en til bakverket og om det er glutenfritt).
     match /cakeSlots/{slotId} {
+      function cakeAfter() {
+        return getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data;
+      }
+      function part(i) {
+        return slotId.split('_')[i];
+      }
       allow get, list: if true;
       allow create: if isAdmin() || (
         request.resource.data.keys().hasOnly(['cake', 'gf'])
         && request.resource.data.gf is bool
         && !exists(/databases/$(database)/documents/cakes/$(request.resource.data.cake))
-        && getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data.slot == slotId
-        && getAfter(/databases/$(database)/documents/cakes/$(request.resource.data.cake)).data.glutenFree == request.resource.data.gf
-        && int(slotId.split('_')[2]) >= 1
+        && cakeAfter().glutenFree == request.resource.data.gf
+        && int(part(2)) >= 1
         && (
-          (slotId.split('_')[0] in cakeLimits()
-            && int(slotId.split('_')[2]) <= cakeLimits()[slotId.split('_')[0]])
-          ||
-          (slotId.split('_')[0] == 'ekstra'
-            && cakeDayFull(slotId.split('_')[1])
-            && (cakeExtraCap() == 0 || int(slotId.split('_')[2]) <= cakeExtraCap()))
+          // typeplass: innenfor typens kvote
+          (part(0) in cakeLimits() && cakeAfter().slot == slotId
+            && int(part(2)) <= cakeLimits()[part(0)])
+          // dagsplass: innenfor dagens totale antall kaker
+          || (part(0) == 'base' && cakeAfter().daySlot == slotId
+            && int(part(2)) <= cakeCfg().get('cakeBaseTotal', 0))
+          // ekstraplass: bare når dagen er full
+          || (part(0) == 'ekstra' && cakeAfter().slot == slotId
+            && cakeDayFull(part(1))
+            && (cakeExtraCap() == 0 || int(part(2)) <= cakeExtraCap()))
         )
       );
       allow update, delete: if isAdmin();

@@ -14,20 +14,23 @@ export interface CakeLine {
 export const emptyLine = (): CakeLine => ({ type: '', variant: '', glutenFree: false, lactoseFree: false, allergens: '', deliveryDay: '' });
 
 export const cakeTypesOf = (config: AppConfig): CakeType[] => config.cakeTypes ?? SEED_CONFIG.cakeTypes!;
-export const cakeLimitsOf = (config: AppConfig) => config.cakeLimits ?? SEED_CONFIG.cakeLimits!;
+export const cakeLimitsOf = (config: AppConfig): Record<string, number> => config.cakeLimits ?? SEED_CONFIG.cakeLimits!;
+const baseTotalOf = (config: AppConfig) => config.cakeBaseTotal ?? SEED_CONFIG.cakeBaseTotal!;
+const noExtraOf = (config: AppConfig) => new Set(config.cakeNoExtra ?? SEED_CONFIG.cakeNoExtra!);
 
 /**
- * Kvoter: hver plass er et eget dokument cakeSlots/{type}_{dag}_{nr}, f.eks. flotekake_d1_3.
- * Et dokument kan bare opprettes én gang, så to som melder seg samtidig kan ikke ta samme plass,
- * og reglene stopper nr over grensen. Plassene inneholder ingen personopplysninger.
- *
- * Når ALLE kvoteplassene for en dag er tatt (22 kaker), åpnes alle typene igjen som
- * ekstraplasser: ekstra_{dag}_{nr}. Grensen for ekstra settes i oppsettet (0 = ingen grense).
+ * Kvoter: hver plass er et eget dokument i cakeSlots. Et dokument kan bare opprettes én gang,
+ * så to som melder seg samtidig kan ikke ta samme plass, og reglene stopper nr over grensen.
+ *  - {type}_{dag}_{nr}: plass i typens kvote (f.eks. blotekake_d1_2)
+ *  - base_{dag}_{nr}:   dagsplass, én per vanlig kake (1–24). Når base_{dag}_24 finnes, er dagen full.
+ *  - ekstra_{dag}_{nr}: ekstrakake etter at dagen er full (grense i oppsettet, 0 = ingen)
+ * Vaffelrøre o.l. (cakeNoExtra) har bare typeplass. Plassene inneholder ingen personopplysninger.
  */
 export interface Availability { used: Record<string, number>; gf: Record<string, number>; taken: Set<string> }
 
 export const slotKey = (type: string, day: string) => `${type}_${day}`;
 export const EXTRA = 'ekstra';
+export const BASE = 'base';
 
 export async function cakeAvailability(db: Firestore): Promise<Availability> {
   const snap = await getDocs(collection(db, 'cakeSlots'));
@@ -42,17 +45,29 @@ export async function cakeAvailability(db: Firestore): Promise<Availability> {
   return { used, gf, taken };
 }
 
-/** Er alle kvoteplassene for dagen tatt? Da er ekstraplassene åpne. */
+/** Er alle kakeplassene for dagen tatt? Da er ekstraplassene åpne. */
 export function baseFull(config: AppConfig, used: Record<string, number>, day: string): boolean {
-  const limits = cakeLimitsOf(config);
-  return Object.entries(limits).every(([type, max]) => (used[slotKey(type, day)] ?? 0) >= (max ?? 0));
+  return (used[slotKey(BASE, day)] ?? 0) >= baseTotalOf(config);
 }
 
-/** Ekstraplasser igjen for dagen (Infinity = ingen grense), eller 0 hvis kvoten ikke er full ennå. */
+/** Ekstraplasser igjen for dagen (Infinity = ingen grense), eller 0 hvis dagen ikke er full ennå. */
 export function extraLeft(config: AppConfig, used: Record<string, number>, day: string): number {
   if (!baseFull(config, used, day)) return 0;
   const cap = config.cakeExtraPerDay ?? 0;
   return cap > 0 ? cap - (used[slotKey(EXTRA, day)] ?? 0) : Infinity;
+}
+
+/** Glutenfrie kaker så langt (uten vaffelrøre): [glutenfrie, totalt]. */
+export function glutenShare(config: AppConfig, a: Availability): [number, number] {
+  const skip = noExtraOf(config);
+  let gf = 0, total = 0;
+  for (const [k, n] of Object.entries(a.used)) {
+    const prefix = k.split('_')[0];
+    if (prefix === BASE || skip.has(prefix)) continue; // dagsplassene ville telt dobbelt
+    total += n;
+    gf += a.gf[k] ?? 0;
+  }
+  return [gf, total];
 }
 
 export class FullError extends Error {
@@ -61,13 +76,14 @@ export class FullError extends Error {
 }
 
 /**
- * Én registrering = ett dokument per bakverk. Bakverk med kvote får en ledig plass i samme skriving.
+ * Én registrering = ett dokument per bakverk, med plassene i samme skriving.
  * Reglene tåler bare ~20 oppslag per skriving, så bakverkene lagres to og to.
  */
 export async function registerCakes(
   db: Firestore, config: AppConfig, person: { name: string; phone: string }, lines: CakeLine[],
 ): Promise<string> {
   const limits = cakeLimitsOf(config);
+  const noExtra = noExtraOf(config);
   const cap = config.cakeExtraPerDay ?? 0;
   const regId = doc(collection(db, 'cakes')).id;
   const CHUNK = 2;
@@ -84,22 +100,25 @@ export async function registerCakes(
         }
         return '';
       };
-      for (const l of chunk) {
+      for (const [j, l] of chunk.entries()) {
         const ref = doc(collection(db, 'cakes'));
-        const max = limits[l.type as CakeTypeId];
-        let slot = '';
-        if (max) {
-          slot = freeSlot(slotKey(l.type, l.deliveryDay), max);
-          if (!slot && baseFull(config, used, l.deliveryDay)) {
-            slot = freeSlot(slotKey(EXTRA, l.deliveryDay), cap > 0 ? cap : 10_000);
-          }
-          if (!slot) throw new FullError(l.type, l.deliveryDay, i);
-          batch.set(doc(db, 'cakeSlots', slot), { cake: ref.id, gf: l.glutenFree });
+        const day = l.deliveryDay;
+        let slot = freeSlot(slotKey(l.type, day), limits[l.type] ?? 0);
+        let daySlot = '';
+        if (slot && !noExtra.has(l.type)) {
+          daySlot = freeSlot(slotKey(BASE, day), baseTotalOf(config));
+          if (!daySlot) slot = ''; // skal ikke skje, men da behandles den som full
         }
+        if (!slot && !noExtra.has(l.type) && baseFull(config, used, day)) {
+          slot = freeSlot(slotKey(EXTRA, day), cap > 0 ? cap : 10_000);
+        }
+        if (!slot) throw new FullError(l.type, day, i + j);
+        batch.set(doc(db, 'cakeSlots', slot), { cake: ref.id, gf: l.glutenFree });
+        if (daySlot) batch.set(doc(db, 'cakeSlots', daySlot), { cake: ref.id, gf: l.glutenFree });
         batch.set(ref, {
           regId, name: person.name, phone: person.phone, type: l.type, variant: l.variant.trim(),
           glutenFree: l.glutenFree, lactoseFree: l.lactoseFree, allergens: l.allergens.trim(),
-          deliveryDay: l.deliveryDay, slot, delivered: false, source: 'app', createdAt: serverTimestamp(),
+          deliveryDay: day, slot, daySlot, delivered: false, source: 'app', createdAt: serverTimestamp(),
         });
       }
       try {
@@ -113,8 +132,9 @@ export async function registerCakes(
   return regId;
 }
 
-/** Admin: sletter et bakverk og frigjør plassen. */
-export async function deleteCake(db: Firestore, cake: { id: string; slot?: string }): Promise<void> {
+/** Admin: sletter et bakverk og frigjør plassene. */
+export async function deleteCake(db: Firestore, cake: { id: string; slot?: string; daySlot?: string }): Promise<void> {
   if (cake.slot) await deleteDoc(doc(db, 'cakeSlots', cake.slot));
+  if (cake.daySlot) await deleteDoc(doc(db, 'cakeSlots', cake.daySlot));
   await deleteDoc(doc(db, 'cakes', cake.id));
 }

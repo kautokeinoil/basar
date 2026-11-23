@@ -52,17 +52,15 @@ export default function Admin() {
     const cfgSnap = await getDoc(cfgRef);
     if (!cfgSnap.exists()) await setDoc(cfgRef, SEED_CONFIG);
     else {
-      // Nye kaketyper legges til (eksisterende rørt ikke), kvoter settes hvis de mangler
+      // Ny kakeliste (høyere cakeVersion) erstatter den gamle. Gjøres før lansering, før ekte kaker finnes.
       const cur = cfgSnap.data() as AppConfig;
-      const have = new Set((cur.cakeTypes ?? []).map((t) => t.id));
-      const seedIds = new Set(SEED_CONFIG.cakeTypes!.map((t) => t.id));
-      const merged = [
-        ...SEED_CONFIG.cakeTypes!.map((t) => (cur.cakeTypes ?? []).find((x) => x.id === t.id) ?? t),
-        ...(cur.cakeTypes ?? []).filter((t) => !seedIds.has(t.id)),
-      ];
       const patch: Record<string, unknown> = {};
-      if (SEED_CONFIG.cakeTypes!.some((t) => !have.has(t.id))) patch.cakeTypes = merged;
-      if (!cur.cakeLimits) patch.cakeLimits = SEED_CONFIG.cakeLimits;
+      if ((cur.cakeVersion ?? 1) < (SEED_CONFIG.cakeVersion ?? 1)) {
+        Object.assign(patch, {
+          cakeVersion: SEED_CONFIG.cakeVersion, cakeTypes: SEED_CONFIG.cakeTypes, cakeLimits: SEED_CONFIG.cakeLimits,
+          cakeBaseTotal: SEED_CONFIG.cakeBaseTotal, cakeNoExtra: SEED_CONFIG.cakeNoExtra, cakeNeedsText: SEED_CONFIG.cakeNeedsText,
+        });
+      }
       if (Object.keys(patch).length) await updateDoc(cfgRef, patch);
     }
     let created = 0;
@@ -372,7 +370,7 @@ function Prizes() {
   );
 }
 
-interface CakeRow { id: string; name: string; phone: string; type: string; variant: string; deliveryDay: string; slot?: string; delivered: boolean; glutenFree: boolean }
+interface CakeRow { id: string; name: string; phone: string; type: string; variant: string; deliveryDay: string; slot?: string; daySlot?: string; delivered: boolean; glutenFree: boolean }
 
 function Cakes({ config }: { config: AppConfig }) {
   const [cakes, setCakes] = useState<CakeRow[] | null>(null);
@@ -400,7 +398,15 @@ function Cakes({ config }: { config: AppConfig }) {
             </tr>
           ))}
           <tr>
-            <td>Herav ekstra (etter at kvoten er full)</td>
+            <td><strong>Kaker totalt (uten vaffelrøre)</strong></td>
+            {days.map((d) => {
+              const n = (cakes ?? []).filter((c) => c.deliveryDay === d.id && c.daySlot).length;
+              const total = config.cakeBaseTotal ?? 0;
+              return <td key={d.id} className={n >= total ? 'full' : ''}><strong>{n}/{total}</strong></td>;
+            })}
+          </tr>
+          <tr>
+            <td>Ekstra (etter at alle {config.cakeBaseTotal ?? 0} er tatt)</td>
             {days.map((d) => <td key={d.id}>{(cakes ?? []).filter((c) => c.deliveryDay === d.id && c.slot?.startsWith('ekstra_')).length}{config.cakeExtraPerDay ? `/${config.cakeExtraPerDay}` : ''}</td>)}
           </tr>
         </tbody>

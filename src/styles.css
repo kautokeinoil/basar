@@ -100,3 +100,11 @@ fieldset.panel legend { padding: 0 4px; }
 .danger-btn { background: var(--err); color: #fff; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .logo { display: block; width: 40px; height: 40px; }
+.cakelist { display: grid; gap: 6px; }
+.cakeopt { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-weight: 400; cursor: pointer; }
+.cakeopt input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.cakeopt.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cakeopt.full { opacity: .45; cursor: not-allowed; }
+.cakename small { color: var(--muted); }
+.cakeleft { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }

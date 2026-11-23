@@ -14,8 +14,10 @@ export interface Shift {
   priority: number;  // 1 fylles først i fase 2
 }
 
-export type CakeTypeId = 'flotekake' | 'formkake' | 'formkakesjoko' | 'muffins' | 'vaffel';
-export interface CakeType { id: CakeTypeId; name: string; unit: string }
+// Kaketyper styres fra oppsettet (config/main.cakeTypes). ID-er: små bokstaver uten mellomrom eller _.
+export type CakeTypeId = string;
+/** unit = mengde som vises (f.eks. «20–30 stk»). needsText = må beskrives (Annen kake). noExtra = åpner ikke igjen (vaffelrøre). */
+export interface CakeType { id: CakeTypeId; name: string; unit: string; needsText?: boolean; noExtra?: boolean }
 
 export interface AppConfig {
   year: number;
@@ -25,7 +27,13 @@ export interface AppConfig {
   shifts: Shift[];
   cakeTypes?: CakeType[];
   /** Maks antall per dag per kaketype. Typer som mangler her, har ingen grense. */
-  cakeLimits?: Partial<Record<CakeTypeId, number>>;
+  cakeLimits?: Record<CakeTypeId, number>;
+  /** Antall kakeplasser per dag som må fylles før ekstraplassene åpner (summen av kakene, uten vaffelrøre). */
+  cakeBaseTotal?: number;
+  cakeNoExtra?: string[];
+  cakeNeedsText?: string[];
+  /** Øk når kakelisten byttes ut, så vedlikeholdsknappen skriver den nye listen. */
+  cakeVersion?: number;
   /** Ekstra kaker per dag NÅR alle kvoteplassene er tatt. 0 eller mangler = ingen grense. */
   cakeExtraPerDay?: number;
 }

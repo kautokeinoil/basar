@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { useConfig, formatDate } from '../lib/useConfig';
 import { normalizePhone, type Country } from '../lib/phone';
 import PhoneInput from '../lib/PhoneInput';
-import { baseFull, cakeAvailability, cakeLimitsOf, extraLeft, cakeTypesOf, emptyLine, FullError, registerCakes, slotKey, type Availability, type CakeLine } from '../lib/cakes';
+import { baseFull, cakeAvailability, cakeLimitsOf, extraLeft, glutenShare, cakeTypesOf, emptyLine, FullError, registerCakes, slotKey, type Availability, type CakeLine } from '../lib/cakes';
 import type { CakeTypeId } from '../lib/types';
 
 export default function CakeForm() {
@@ -28,6 +28,8 @@ export default function CakeForm() {
   const dayName = (id: string) => config.days.find((d) => d.id === id)?.name ?? id;
   const limits = cakeLimitsOf(config);
 
+  const noExtra = new Set(types.filter((t) => t.noExtra).map((t) => t.id));
+
   /** Ledige plasser for type/dag, minus det som allerede er valgt i andre linjer i dette skjemaet. */
   const left = (type: CakeTypeId, day: string, exceptLine: number) => {
     const max = limits[type];
@@ -35,17 +37,14 @@ export default function CakeForm() {
     const used = avail?.used ?? {};
     const inForm = lines.filter((l, j) => j !== exceptLine && l.type === type && l.deliveryDay === day).length;
     const base = max - (used[slotKey(type, day)] ?? 0) - inForm;
-    if (base > 0) return base;
-    // Kvoten for typen er full: ekstraplasser åpner når alle 22 plassene for dagen er tatt
-    const extrasInForm = lines.filter((l, j) => j !== exceptLine && l.deliveryDay === day && limits[l.type as CakeTypeId]
-      && (used[slotKey(l.type, day)] ?? 0) >= limits[l.type as CakeTypeId]!).length;
+    if (base > 0 || noExtra.has(type)) return base;
+    // Typen er full: ekstraplasser åpner når alle kakeplassene for dagen er tatt
+    const extrasInForm = lines.filter((l, j) => j !== exceptLine && l.deliveryDay === day && !noExtra.has(l.type)
+      && (used[slotKey(l.type, day)] ?? 0) >= (limits[l.type] ?? 0)).length;
     return extraLeft(config, used, day) - extrasInForm;
   };
   const isExtra = (day: string) => !!avail && !!day && baseFull(config, avail.used, day);
-
-  // Glutenfritt så langt, blant kaker med kvote
-  const totalUsed = Object.values(avail?.used ?? {}).reduce((a, b) => a + b, 0);
-  const totalGf = Object.values(avail?.gf ?? {}).reduce((a, b) => a + b, 0);
+  const [totalGf, totalUsed] = avail ? glutenShare(config, avail) : [0, 0];
 
   const update = (i: number, patch: Partial<CakeLine>) => setLines((cur) => cur.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
@@ -56,7 +55,9 @@ export default function CakeForm() {
     if (name.trim().length < 2) return setError('Skriv inn fullt navn.');
     if (!p) return setError('Sjekk telefonnummeret. Velg riktig land, eller skriv nummeret med landskode (+46 …).');
     const bad = lines.findIndex((l) => !l.type || !l.deliveryDay);
-    if (bad >= 0) return setError(`Velg leveringsdag og type for bakverk ${bad + 1}.`);
+    if (bad >= 0) return setError(`Velg leveringsdag og hva du baker, for bakverk ${bad + 1}.`);
+    const noText = lines.findIndex((l) => types.find((t) => t.id === l.type)?.needsText && l.variant.trim().length < 2);
+    if (noText >= 0) return setError(`Skriv hva slags kake bakverk ${noText + 1} er.`);
     const over = lines.findIndex((l, i) => left(l.type as CakeTypeId, l.deliveryDay, i) <= 0);
     if (over >= 0) return setError(`Vi har nok ${typeName(lines[over].type).toLowerCase()} til ${dayName(lines[over].deliveryDay)}. Velg en annen type eller dag for bakverk ${over + 1}.`);
     setBusy(true);
@@ -120,27 +121,36 @@ export default function CakeForm() {
               {basarDays.map((d) => <option key={d.id} value={d.id}>{d.name}, {formatDate(d.date)}</option>)}
             </select>
           </label>
-          <div className="chips" role="radiogroup" aria-label="Type bakverk">
-            {types.map((t) => {
-              const n = left(t.id, l.deliveryDay, i);
-              const full = n <= 0;
-              return (
-                <label key={t.id} className={`chip ${l.type === t.id ? 'on' : ''} ${full ? 'full' : ''}`}>
-                  <input type="radio" name={`type-${i}`} checked={l.type === t.id} disabled={full && l.type !== t.id}
-                    onChange={() => update(i, { type: t.id })} />
-                  {t.name}
-                  <small>
-                    {full ? 'Nok for denne dagen'
-                      : isExtra(l.deliveryDay) && limits[t.id] ? (Number.isFinite(n) ? `Ekstra · ${n} igjen` : 'Ekstra plass')
-                      : l.deliveryDay && Number.isFinite(n) ? `${t.unit} · ${n} igjen` : t.unit}
-                  </small>
-                </label>
-              );
-            })}
-          </div>
-          <label>Hva slags? <span className="muted">(valgfritt)</span>
-            <input value={l.variant} onChange={(e) => update(i, { variant: e.target.value })} placeholder="F.eks. sjokoladekake, kanelboller" maxLength={80} />
-          </label>
+          {!l.deliveryDay ? (
+            <p className="muted small">Velg dag først, så ser du hva kafeen trenger.</p>
+          ) : (
+            <div className="cakelist" role="radiogroup" aria-label="Hva baker du?">
+              {types.map((t) => {
+                const n = left(t.id, l.deliveryDay, i);
+                const full = n <= 0;
+                const extra = !full && isExtra(l.deliveryDay) && !t.noExtra && (avail?.used[slotKey(t.id, l.deliveryDay)] ?? 0) >= (limits[t.id] ?? 0);
+                return (
+                  <label key={t.id} className={`cakeopt ${l.type === t.id ? 'on' : ''} ${full ? 'full' : ''}`}>
+                    <input type="radio" name={`type-${i}`} checked={l.type === t.id} disabled={full && l.type !== t.id}
+                      onChange={() => update(i, { type: t.id })} />
+                    <span className="cakename">{t.name}{t.unit && <small> ({t.unit})</small>}</span>
+                    <span className="cakeleft">
+                      {full ? 'Nok' : extra ? (Number.isFinite(n) ? `Ekstra: ${n}` : 'Ekstra') : Number.isFinite(n) ? `${n} igjen` : ''}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {types.find((t) => t.id === l.type)?.needsText ? (
+            <label>Hva slags kake? <span className="muted">(må fylles ut)</span>
+              <input value={l.variant} onChange={(e) => update(i, { variant: e.target.value })} placeholder="F.eks. eplekake" maxLength={80} />
+            </label>
+          ) : (
+            <label>Kommentar <span className="muted">(valgfritt)</span>
+              <input value={l.variant} onChange={(e) => update(i, { variant: e.target.value })} placeholder="F.eks. med bringebær" maxLength={80} />
+            </label>
+          )}
           <div className="row">
             <label className="choice"><input type="checkbox" checked={l.glutenFree} onChange={(e) => update(i, { glutenFree: e.target.checked })} /><span>Glutenfri</span></label>
             <label className="choice"><input type="checkbox" checked={l.lactoseFree} onChange={(e) => update(i, { lactoseFree: e.target.checked })} /><span>Laktosefri</span></label>

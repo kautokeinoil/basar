@@ -7,15 +7,32 @@ export const SEED_CONFIG: AppConfig = {
   year: 2026,
   contact: { email: 'basar@kautokeinoil.no', phone: '41321804' },
   place: 'Báktehárji',
+  // Kafeens ønskeliste, per basardag (24 kaker + 24 liter vaffelrøre)
+  cakeVersion: 2,
   cakeTypes: [
-    { id: 'flotekake', name: 'Fløtekake', unit: '1 kake' },
-    { id: 'formkake', name: 'Formkake', unit: '1 kake' },
-    { id: 'formkakesjoko', name: 'Formkake sjokolade', unit: '1 kake' },
-    { id: 'muffins', name: 'Muffins/boller', unit: '1 brett' },
-    { id: 'vaffel', name: 'Vaffelrøre', unit: '4 liter' },
+    { id: 'blotekake', name: 'Bløtekake', unit: '' },
+    { id: 'marsipankake', name: 'Marsipankake', unit: '' },
+    { id: 'pavlova', name: 'Pavlova', unit: '' },
+    { id: 'verdensbeste', name: 'Verdensbeste', unit: '' },
+    { id: 'ostekake', name: 'Ostekake', unit: '' },
+    { id: 'suksessterte', name: 'Suksessterte/nøttekake', unit: '' },
+    { id: 'trippelkrem', name: 'Trippelkremkake', unit: '' },
+    { id: 'brownie', name: 'Brownie', unit: '' },
+    { id: 'sjokoladekake', name: 'Sjokoladekake', unit: '' },
+    { id: 'gulrotkake', name: 'Gulrotkake', unit: '' },
+    { id: 'kanelboller', name: 'Kanelboller', unit: '20–30 stk' },
+    { id: 'muffins', name: 'Muffins', unit: '15–20 stk' },
+    { id: 'annenkake', name: 'Annen kake', unit: 'skriv hva', needsText: true },
+    { id: 'vaffel', name: 'Vaffelrøre', unit: '4 liter', noExtra: true },
   ],
-  // Per basardag. 22 kaker per dag som i fjor. Vaffelrøre har ingen grense.
-  cakeLimits: { flotekake: 7, formkake: 6, formkakesjoko: 6, muffins: 3 },
+  cakeLimits: {
+    blotekake: 3, marsipankake: 1, pavlova: 2, verdensbeste: 2, ostekake: 2, suksessterte: 2, trippelkrem: 1,
+    brownie: 3, sjokoladekake: 2, gulrotkake: 2, kanelboller: 2, muffins: 1, annenkake: 1,
+    vaffel: 6, // 6 × 4 liter = 24 liter per dag, åpner ikke igjen
+  },
+  cakeBaseTotal: 24, // summen av kakene over, uten vaffelrøre
+  cakeNoExtra: ['vaffel'], // åpner ikke igjen og teller ikke med i de 24 (brukes av reglene)
+  cakeNeedsText: ['annenkake'], // må beskrives (brukes av reglene)
   days: [
     { id: 'opprigg', name: 'Opprigg', date: '2026-12-28' },
     { id: 'd1', name: 'Basardag 1', date: '2026-12-29' },
