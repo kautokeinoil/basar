@@ -40,15 +40,23 @@ function bookFormula_(book) {
   return '={' + safe + '; {"", "Sum:", ' + sum + '}}';
 }
 
-/** Per bok: antall per status. Viser hva som mangler bekreftelse før trykking. */
-function statusFormula_() {
-  return '=QUERY(' + SRC + ", \"select Col12, count(Col1) where Col12 <> '' and Col10 <> 'avvist' group by Col12 pivot Col10 label Col12 'Bok'\", 1)";
+/**
+ * Per bok: antall og sum som kommer på trykk.
+ * Er verdikolonnen tom (f.eks. rett etter nullstilling, eller bare «ikke oppgitt»), kan QUERY ikke summere:
+ * da vises bare antall, og står det ingen gevinster på trykk ennå, en forklarende tekst.
+ */
+function printFormula_() {
+  var where = "Col12 <> '' and " + OK;
+  var withSum = 'QUERY(' + SRC + ', "select Col12, count(Col1), sum(Col8) where ' + where +
+    " group by Col12 label Col12 'Bok', count(Col1) 'På trykk', sum(Col8) 'Sum på trykk'\", 1)";
+  var countOnly = 'QUERY(' + SRC + ', "select Col12, count(Col1) where ' + where +
+    " group by Col12 label Col12 'Bok', count(Col1) 'På trykk'\", 1)";
+  return '=IFERROR(' + withSum + ', IFERROR(' + countOnly + ', "Ingen bekreftede gevinster i bøkene ennå"))';
 }
 
-/** Per bok: antall og sum som kommer på trykk. */
-function printFormula_() {
-  return '=QUERY(' + SRC + ", \"select Col12, count(Col1), sum(Col8) where Col12 <> '' and " + OK +
-    " group by Col12 label Col12 'Bok', count(Col1) 'På trykk', sum(Col8) 'Sum på trykk'\", 1)";
+/** Per bok og status. Tom tekst i stedet for feil når det ikke finnes gevinster ennå. */
+function statusFormula_() {
+  return '=IFERROR(QUERY(' + SRC + ", \"select Col12, count(Col1) where Col12 <> '' and Col10 <> 'avvist' group by Col12 pivot Col10 label Col12 'Bok'\", 1), \"Ingen gevinster lagt i bøker ennå\")";
 }
 
 function setupBooks() {
